@@ -8,6 +8,8 @@ export interface AdviceEntry {
   sourceTitle: string;
   sourceType: string;
   sourceLink: string;
+  msgSourceTitle?: string;
+  sourceSummary?: string;
 }
 
 export interface VectorSearchResult {

@@ -190,29 +190,67 @@ export function registerRoutes(app: Express): Server {
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename=chat-analysis.csv');
         
-        // CSV header without score column and optional feedback
-        res.write('Timestamp,Query,Advice_1_Category_Source,Advice_1_Content,Advice_2_Category_Source,Advice_2_Content,Advice_3_Category_Source,Advice_3_Content,Advice_4_Category_Source,Advice_4_Content,Advice_5_Category_Source,Advice_5_Content,Other_Advice_Count,Stage_1_Response,Final_Response,Thumbs_Up' + (showFeedback ? ',Feedback' : '') + '\n');
+        // CSV header for up to 8 advice entries
+        let header = 'Timestamp,Query';
+        for (let i = 1; i <= 8; i++) {
+          header += `,Advice_${i}_Category_Source,Advice_${i}_Content`;
+        }
+        header += ',Other_Advice_Count,Stage_1_Response,Final_Response,Thumbs_Up' + (showFeedback ? ',Feedback' : '') + '\n';
+        
+        res.write(header);
         
         filteredMessages.forEach(message => {
           const timestamp = message.createdAt?.toISOString() || '';
           const query = message.query.replace(/"/g, '""');
           
-          // Create an array of 5 advice entries (pad with empty entries if less than 5)
+          // Enhanced advice display with ranking and scores
           const allAdvice = message.metadata?.displayEntries || [];
-          const responseAdvice = allAdvice.slice(0, 5);
-          const otherAdviceCount = Math.max(0, allAdvice.length - 5);
           
-          const adviceEntries = Array(5).fill(null).map((_, index) => {
-            const entry = responseAdvice[index];
-            if (!entry) return ['', '']; // Return empty strings for category/source and content
-            const categorySource = `${entry.entry.category} | ${entry.entry.sourceTitle}`;
-            const content = `${entry.entry.advice} - ${entry.entry.adviceContext}`;
-            return [
-              categorySource.replace(/"/g, '""'),
-              content.replace(/"/g, '""').replace(/\n/g, ' ')
-            ];
-          }).flat();
+          // For the default view, just show the top entries (up to 8)
+          // We don't have a way to know exactly which ones were used in the response
+          const responseAdvice = allAdvice.slice(0, 8);
+          const otherAdvice = allAdvice.slice(8);
           
+          const selectedAdviceHtml = responseAdvice.map((entry, index) => `
+            <div class="advice-block">
+              <div>
+                <span class="advice-rank">Rank ${index + 1}</span>
+                <span class="advice-metadata">${entry.entry.category} | ${entry.entry.sourceTitle} - Score: ${entry.similarity.toFixed(3)}</span>
+              </div>
+              <div class="advice-content">
+                <span class="advice-text">${entry.entry.advice}</span>
+                <span class="advice-context"> - ${entry.entry.adviceContext}</span>
+              </div>
+            </div>
+          `).join('') || '';
+          
+          const otherAdviceHtml = otherAdvice.map((entry, index) => `
+            <div class="advice-block">
+              <div>
+                <span class="advice-rank">Rank ${allAdvice.indexOf(entry) + 1}</span>
+                <span class="advice-metadata">${entry.entry.category} | ${entry.entry.sourceTitle} - Score: ${entry.similarity.toFixed(3)}</span>
+              </div>
+              <div class="advice-content">
+                <span class="advice-text">${entry.entry.advice}</span>
+                <span class="advice-context"> - ${entry.entry.adviceContext}</span>
+              </div>
+            </div>
+          `).join('') || '';
+          
+          // Original combined advice display - show all response advice items
+          const selectedAdviceOriginal = responseAdvice.map((entry, index) => `
+            <div class="advice-block">
+              <div>
+                <span class="advice-rank">Rank ${index + 1}</span>
+                <span class="advice-metadata">${entry.entry.category} | ${entry.entry.sourceTitle} - Score: ${entry.similarity.toFixed(3)}</span>
+              </div>
+              <div class="advice-content">
+                <span class="advice-text">${entry.entry.advice}</span>
+                <span class="advice-context"> - ${entry.entry.adviceContext}</span>
+              </div>
+            </div>
+          `).join('') || '';
+
           const stage1Response = (message.stage1Response || '').replace(/"/g, '""');
           const finalResponse = (message.finalResponse || '').replace(/"/g, '""');
           const thumbsUp = message.thumbsUp === null ? '' : message.thumbsUp.toString();
@@ -221,13 +259,28 @@ export function registerRoutes(app: Express): Server {
           // Combine all fields with proper CSV escaping
           const row = [
             `"${timestamp}"`,
-            `"${query}"`,
-            ...adviceEntries.map(field => `"${field}"`),
-            `"${otherAdviceCount}"`,
-            `"${stage1Response}"`,
-            `"${finalResponse}"`,
-            `"${thumbsUp}"`
+            `"${query}"`
           ];
+          
+          // Add advice entries (up to 8 possible entries)
+          responseAdvice.forEach(entry => {
+            const categorySource = `${entry.entry.category} | ${entry.entry.sourceTitle}`;
+            const content = `${entry.entry.advice} - ${entry.entry.adviceContext}`;
+            row.push(`"${categorySource.replace(/"/g, '""')}"`);
+            row.push(`"${content.replace(/"/g, '""').replace(/\n/g, ' ')}"`);
+          });
+          
+          // Pad with empty entries if less than 8
+          const emptyEntriesNeeded = 8 - responseAdvice.length;
+          for (let i = 0; i < emptyEntriesNeeded * 2; i++) {
+            row.push('""');
+          }
+          
+          // Add remaining fields
+          row.push(`"${otherAdvice.length}"`);
+          row.push(`"${stage1Response}"`);
+          row.push(`"${finalResponse}"`);
+          row.push(`"${thumbsUp}"`);
           
           if (showFeedback) {
             row.push(`"${feedback}"`);
@@ -549,17 +602,26 @@ export function registerRoutes(app: Express): Server {
                   border-left-color: #4CAF50 !important;
                   padding: 8px;
                   margin: 10px 0;
+                  display: none !important;
                 }
                 .other-advice-section {
                   background-color: #fff8f0 !important;
                   border-left-color: #FFA500 !important;
                   padding: 8px;
                   margin: 10px 0;
+                  display: none !important;
                 }
                 .advice-section {
                   background-color: #f8f9fa !important;
                   padding: 8px;
                   margin: 10px 0;
+                  display: block !important;
+                }
+                .stage1-response {
+                  display: block !important;
+                }
+                .final-response {
+                  display: block !important;
                 }
                 .response-content {
                   background-color: white !important;
@@ -755,6 +817,24 @@ export function registerRoutes(app: Express): Server {
                   const viewIndicator = document.getElementById('viewIndicator');
                   viewIndicator.textContent = "Detailed Insights View - Showing Split Insights + Final Response";
                   viewIndicator.style.display = 'block';
+                } else {
+                  // Default view - ensure proper order and visibility
+                  document.querySelectorAll('.advice-section, .stage1-response, .final-response').forEach(el => {
+                    el.style.display = 'block';
+                    el.classList.remove('hidden-section');
+                  });
+                  
+                  document.querySelectorAll('.selected-advice-section, .other-advice-section').forEach(el => {
+                    el.style.display = 'none';
+                    el.classList.add('hidden-section');
+                  });
+                  
+                  document.querySelectorAll('.final-response .response-title').forEach(el => {
+                    el.textContent = 'Stage 2 Response - Style Narrative';
+                  });
+                  
+                  const viewIndicator = document.getElementById('viewIndicator');
+                  viewIndicator.style.display = 'none';
                 }
                 
                 // Initialize print styles
@@ -793,10 +873,13 @@ export function registerRoutes(app: Express): Server {
           
           // Enhanced advice display with ranking and scores
           const allAdvice = message.metadata?.displayEntries || [];
-          const selectedAdvice = allAdvice.slice(0, 5);
-          const otherAdvice = allAdvice.slice(5);
           
-          const selectedAdviceHtml = selectedAdvice.map((entry, index) => `
+          // For the default view, just show the top entries (up to 8)
+          // We don't have a way to know exactly which ones were used in the response
+          const responseAdvice = allAdvice.slice(0, 8);
+          const otherAdvice = allAdvice.slice(8);
+          
+          const selectedAdviceHtml = responseAdvice.map((entry, index) => `
             <div class="advice-block">
               <div>
                 <span class="advice-rank">Rank ${index + 1}</span>
@@ -812,7 +895,7 @@ export function registerRoutes(app: Express): Server {
           const otherAdviceHtml = otherAdvice.map((entry, index) => `
             <div class="advice-block">
               <div>
-                <span class="advice-rank">Rank ${index + 6}</span>
+                <span class="advice-rank">Rank ${allAdvice.indexOf(entry) + 1}</span>
                 <span class="advice-metadata">${entry.entry.category} | ${entry.entry.sourceTitle} - Score: ${entry.similarity.toFixed(3)}</span>
               </div>
               <div class="advice-content">
@@ -822,8 +905,8 @@ export function registerRoutes(app: Express): Server {
             </div>
           `).join('') || '';
           
-          // Original combined advice display
-          const selectedAdviceOriginal = message.metadata?.displayEntries?.map((entry, index) => `
+          // Original combined advice display - show all response advice items
+          const selectedAdviceOriginal = responseAdvice.map((entry, index) => `
             <div class="advice-block">
               <div>
                 <span class="advice-rank">Rank ${index + 1}</span>
@@ -845,27 +928,27 @@ export function registerRoutes(app: Express): Server {
                   <div class="query-timestamp">${timestamp}</div>
                   <div class="query-text">${message.query}</div>
                 </div>
-                <div class="response-section final-response">
-                  <div class="response-title">Stage 2 Response - Style Narrative</div>
-                  <div class="response-content">${(message.finalResponse || '').replace(/[•â€¢]/g, '&#8226;')}</div>
-                </div>
                 <div class="advice-section">
-                  <div class="advice-title">Selected Advice Items</div>
+                  <div class="advice-title">Top Advice Items (${responseAdvice.length})</div>
                   ${selectedAdviceOriginal}
                 </div>
                 <div class="selected-advice-section hidden-section">
-                  <div class="advice-title">Selected Advice Items for Response Creation</div>
+                  <div class="advice-title">Top Advice Items (${responseAdvice.length})</div>
                   ${selectedAdviceHtml}
                 </div>
                 ${otherAdviceHtml ? `
                 <div class="other-advice-section hidden-section">
-                  <div class="advice-title">Other Advice Items - Not in Response but Displayed</div>
+                  <div class="advice-title">Additional Advice Items (${otherAdvice.length})</div>
                   ${otherAdviceHtml}
                 </div>
                 ` : ''}
                 <div class="response-section stage1-response">
                   <div class="response-title">Stage 1 Response - Curate Narrative</div>
                   <div class="response-content">${(message.stage1Response || '').replace(/[•â€¢]/g, '&#8226;')}</div>
+                </div>
+                <div class="response-section final-response">
+                  <div class="response-title">Stage 2 Response - Style Narrative</div>
+                  <div class="response-content">${(message.finalResponse || '').replace(/[•â€¢]/g, '&#8226;')}</div>
                 </div>
                 <div class="feedback-indicator">${thumbsUp}</div>
               </td>

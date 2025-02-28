@@ -17,6 +17,107 @@ const anthropic = new Anthropic({
 
 const vectorSearch = new VectorSearch(process.env.OPENAI_API_KEY);
 
+/**
+ * Calculates confidence level based on search results quality
+ * @param results Vector search results sorted by similarity
+ * @returns Object with confidence level and detailed metrics
+ * @throws Error if calculation fails or input is invalid
+ */
+function calculateConfidence(results: VectorSearchResult[]): {
+  level: 'high_confidence' | 'medium_confidence' | 'low_confidence',
+  weightedScore: number,
+  countAboveThreshold: number,
+  topScore: number,
+  categoryConsistency: boolean,
+  explanation: string
+} {
+  // Input validation
+  if (!results || !Array.isArray(results)) {
+    console.error("calculateConfidence received invalid results:", results);
+    throw new Error("Invalid results format provided to confidence calculation");
+  }
+  
+  if (results.length === 0) {
+    console.log("calculateConfidence: No results found");
+    throw new Error("Cannot calculate confidence with empty results");
+  }
+  
+  // 1. Calculate weighted score from top 3 results
+  const WEIGHTS = [0.6, 0.3, 0.1]; // Prioritize top result
+  let weightedScore = 0;
+  let weightsUsed = 0;
+  
+  for (let i = 0; i < Math.min(results.length, WEIGHTS.length); i++) {
+    weightedScore += results[i].similarity * WEIGHTS[i];
+    weightsUsed += WEIGHTS[i];
+  }
+  
+  weightedScore = weightedScore / weightsUsed;
+  
+  // 2. Count number of results above confidence thresholds
+  const MINIMUM_HIGH_THRESHOLD = 0.50;
+  const MINIMUM_MEDIUM_THRESHOLD = 0.45;
+  const countAboveHighThreshold = results.filter(r => r.similarity >= MINIMUM_HIGH_THRESHOLD).length;
+  const countAboveMediumThreshold = results.filter(r => r.similarity >= MINIMUM_MEDIUM_THRESHOLD).length;
+  
+  // 3. Check for category consistency (in top 3 results)
+  const topCategories = results.slice(0, Math.min(3, results.length)).map(r => r.entry.category);
+  const categoryConsistency = topCategories.every(c => c === topCategories[0]);
+  
+  // 4. Get the top score
+  const topScore = results[0].similarity;
+  
+  // Log detailed metrics for tuning and debugging
+  console.log("Confidence calculation metrics:", {
+    topScore,
+    weightedScore,
+    countAboveHighThreshold,
+    countAboveMediumThreshold,
+    categoryConsistency,
+    topCategories: topCategories.slice(0, 3),
+    totalResults: results.length
+  });
+  
+  // 5. Determine confidence level using multiple factors
+  let level: 'high_confidence' | 'medium_confidence' | 'low_confidence';
+  let explanation: string;
+  
+  // High confidence requires:
+  // - Weighted score >= 0.52, AND
+  // - At least 2 results above 0.50, AND
+  // - Top score >= 0.53
+  if (weightedScore >= 0.52 && countAboveHighThreshold >= 2 && topScore >= 0.53) {
+    level = 'high_confidence';
+    explanation = `High confidence: weighted score ${weightedScore.toFixed(3)}, ${countAboveHighThreshold} results above ${MINIMUM_HIGH_THRESHOLD}, top score ${topScore.toFixed(3)}`;
+    
+    // Boost for category consistency
+    if (categoryConsistency) {
+      explanation += ', with consistent categories';
+    }
+  } 
+  // Medium confidence requires:
+  // - Weighted score >= 0.45, OR
+  // - Top score >= 0.46 and at least 2 results above 0.45
+  else if (weightedScore >= 0.45 || (topScore >= 0.46 && countAboveMediumThreshold >= 2)) {
+    level = 'medium_confidence';
+    explanation = `Medium confidence: weighted score ${weightedScore.toFixed(3)}, ${countAboveMediumThreshold} results above ${MINIMUM_MEDIUM_THRESHOLD}, top score ${topScore.toFixed(3)}`;
+  } 
+  // Otherwise, low confidence
+  else {
+    level = 'low_confidence';
+    explanation = `Low confidence: weighted score ${weightedScore.toFixed(3)}, top score ${topScore.toFixed(3)}`;
+  }
+  
+  return {
+    level,
+    weightedScore,
+    countAboveThreshold: countAboveHighThreshold,
+    topScore,
+    categoryConsistency,
+    explanation
+  };
+}
+
 // Initialize data and vector search
 export async function initializeSystem(csvPath: string): Promise<void> {
   try {
@@ -135,14 +236,14 @@ Response Process:
 3. Construct your response by:
    - Starting with direct, actionable advice on the core question
    - Including only the most relevant insights from the entries
-   - Keeping the overall response concise (400-600 words maximum)
+   - Keeping the overall response concise (500 words maximum)
    - Using direct quotes where appropriate with precise attribution: "As I mentioned in [MsgSourceTitle] [SourceTitle], '[quote]'"
 
 4. When no relevant advice exists, respond with: "This area hasn't been covered in my existing advice yet."
 
 5. Always conclude with source attributions:
    - Format: "\\n\\nFor more insights, check out:\\n"
-   - For each source: "• <a href='[sourceLink]'>[Title]</a> ([sourceType])"
+   - For each source: "• <a href='[sourceLink]'>[Title]</a> ([sourceType])-[sourceSummary]"
    - Include all unique source links from utilized advice points
    - Each source should appear on its own line
 
@@ -170,27 +271,17 @@ Voice Characteristics:
 - Grounds advice in practical experience without overusing "I've seen" statements
 - Often starts with an attention-grabbing statement or question
 
-Response Structure:
-- Begin with a direct, attention-grabbing statement about the topic (e.g. "Let's talk about..." or "Here's something about...")
-- Follow with a concise framing that establishes why this matters to the entrepreneur
+General Response Structure:
+- Begin with a direct statement about the topic
 - Present 3-5 key insights from the advice entries, prioritizing factual accuracy:
   * A clear topic statement drawn directly from the advice entries
   * IF AVAILABLE in the advice entries, include a specific example or anecdote that illustrates the point, and:
      - Present it with concrete details (numbers, timeframes, outcomes) when they exist in the source
      - Frame it as a real scenario rather than a hypothetical
      - When sharing Heidi's firsthand observations, include specific contextual details that show expertise
-  * When possible, extract an actionable takeaway related to the insight
-- End with a sharp, memorable takeaway that:
-  * Crystallizes the key advice into one actionable statement
-  * Frames it as either a decision point (e.g. "The question isn't if you'll face setbacks, but how you'll respond") or a threshold statement (e.g. "Remember: The best pivots happen before they're obvious to everyone else")
+  * When possible, extract a concise actionable takeaway related to the insight
   * Avoids generic summaries in favor of distinctive, quotable insights
-
-IMPORTANT: Never invent examples or anecdotes not found in the provided advice entries. It's better to omit an example than to fabricate one.
-
-Adapt the structure appropriately for different query types while maintaining Heidi's voice:
-  * For tactical "how-to" questions: Emphasize actionable steps and implementation specifics
-  * For strategic "when/why" questions: Focus on decision criteria and evaluation frameworks
-  * For relationship questions: Include more interpersonal dynamics and communication strategies
+- End with a sharp takeaway that crystallizes the key advice into one actionable statement
 
 Distinctive Markers:
 - Use phrases like "Let me tell you," "Here's the reality," or "Let's talk about" to start key points
@@ -199,27 +290,30 @@ Distinctive Markers:
 - Use phrases like "I've watched" or "I've seen" sparingly but effectively to establish credibility
 - Occasionally use direct questions to the reader to create engagement (e.g. "Are you truly accounting for...?" or "Why?")
 
-Transitions:
-- Connect points with phrases like "Now that you understand X, let's talk about Y"
-- Use "And by the way" or "One more thing" to introduce related points
-- Create a sense of building importance across the response
-- Use language that implies progression: "First," "Next," "Finally" or "Here's what makes the difference"
-- Occasionally break the fourth wall with phrases like "Remember this:" or "Here's the bottom line:"
-
 Paragraph Flow:
 - Vary paragraph length deliberately for rhythm and emphasis:
   * Use very short (1-2 sentences) paragraphs for key insights or warnings
   * Include at least one single-sentence paragraph for dramatic effect or to highlight a critical point
-  * Reserve slightly longer paragraphs (3-4 sentences) for explanations or context
+  * Reserve slightly longer paragraphs (3-4 sentences) for complex explanations or context when absolutely necessary
   * Place the most important insights in shorter paragraphs surrounded by white space
 - This varied structure creates the natural rhythm characteristic of Heidi's communication
 
-Content Structure:
-- Begins with direct advice rather than lengthy context-setting
-- Uses natural transitions and white space to separate key points
-- Presents 3-5 core insights rather than exhaustive coverage
-- Avoids formal headings or academic structure
-- Closes with a memorable, actionable takeaway
+Confidence Level Adjustments:
+When you see a prompt marked with a confidence level, maintain Heidi's authentic voice throughout while making these minimal adjustments:
+
+- High confidence:
+  * Open with a direct, authoritative statement about the topic (e.g., "Let me tell you something about fundraising timing that might save you months of heartache...")
+  * End with "Remember this:" followed by the key takeaway
+
+- Medium confidence:
+  * Open by acknowledging partial expertise while remaining direct (e.g., “I don't have a perfect answer on [topic], but here's what I can say to help you think about…”)
+  * Where possible, connect to adjacent areas where Heidi has more expertise
+
+- Low confidence:
+  * Open by briefly acknowledging limited coverage (e.g., "I haven't covered [topic] much, but here are some things that might apply...")
+  * Focus on related principles from adjacent areas of expertise rather than specific directives
+
+IMPORTANT: Regardless of confidence level, maintain Heidi's direct, conversational style throughout the response. The confidence level primarily affects the opening framing and degree of specificity, NOT her fundamental voice.
 
 Examples of Heidi's authentic voice (from her actual writing):
 
@@ -240,10 +334,14 @@ Important Guidelines:
   * CORRECT: Most entrepreneurs are so inwardly focused - it's my team, it's my product - they rarely look at the bigger picture.
   * CORRECT: As I mentioned in my Stanford talk, "entrepreneurs need to balance focus with awareness."
   * FINAL CHECK: Before completing the response, review specifically for unattributed quotation marks and remove them
+- Ensure conciseness
+  * CRITICAL: Each paragraph MUST deliver a distinct insight directly addressing the question - ruthlessly eliminate redundancy/repitition and topic drift
+  * If similar advice appears in multiple entries, merge them into a single, stronger point rather than presenting variations of the same idea
+  * Use contractions and conversational shortcuts where appropriate
 
-- Start responses with direct advice, not contextual framing
-- Keep responses concise (400-600 words total)
-- Avoid using formal headings, bullet points, or academic structure
+- Start responses with direct advice, NOT contextual framing
+- Keep responses concise (aim for 300-500 words)
+- Avoid using formal headings, bullet points, or academic structure EXCEPT for the "For more insights, check out:" section, which MUST be preserved exactly as it appears in the original response, including all bullet points, links, and source attributions
 - Use paragraph breaks to separate key points instead of headings
 - Limit "I've seen" statements to 1-2 per response
 - Never add meta-commentary about writing style or content limitations
@@ -300,51 +398,60 @@ export async function generateStage1Response(query: string): Promise<string> {
       return searchResults.slice(0, 5);
     }
 
-    // Use the new function to select high-quality results
+    // Calculate confidence - let any errors bubble up and fail the whole response generation
+    console.log(`Calculating confidence for query "${query}"...`);
+    const confidenceAnalysis = calculateConfidence(searchResults);
+    console.log(`Confidence analysis complete: ${confidenceAnalysis.level}`);
+    
+    // Select high-quality results using existing function
     const responseResults = selectHighQualityResults(searchResults);
     console.log(`Selected ${responseResults.length} high-quality entries for response generation`);
     
-    // This remains unchanged
+    // Store results and confidence metadata
     const displayResults = searchResults.slice(0, 10);
-
-    // Store display results in metadata
     const messages = await storage.getLatestMessages(1);
     if (messages.length > 0) {
-      const mappedEntries = displayResults.map(r => {
-        const rawData = DataLoader.getInstance().getRawAdviceByProcessed(
-          r.entry.advice,
-          r.entry.adviceContext
-        );
-
-        return {
-          entry: {
-            category: r.entry.category,
-            subCategory: r.entry.subCategory,
-            advice: r.entry.advice,
-            adviceContext: r.entry.adviceContext,
-            sourceTitle: r.entry.sourceTitle,
-            sourceType: r.entry.sourceType,
-            sourceLink: r.entry.sourceLink,
-            ...(rawData && {
-              rawAdvice: rawData.rawAdvice,
-              rawAdviceContext: rawData.rawAdviceContext
-            })
-          },
-          similarity: r.similarity
-        };
-      });
-
-      await storage.updateMessage(messages[0].id, {
-        metadata: {
-          displayEntries: mappedEntries
-        }
-      });
+      try {
+        const mappedEntries = displayResults.map(r => {
+          const rawData = DataLoader.getInstance().getRawAdviceByProcessed(
+            r.entry.advice,
+            r.entry.adviceContext
+          );
+  
+          return {
+            entry: {
+              category: r.entry.category,
+              subCategory: r.entry.subCategory,
+              advice: r.entry.advice,
+              adviceContext: r.entry.adviceContext,
+              sourceTitle: r.entry.sourceTitle,
+              sourceType: r.entry.sourceType,
+              sourceLink: r.entry.sourceLink,
+              sourceSummary: r.entry.sourceSummary,
+              ...(rawData && {
+                rawAdvice: rawData.rawAdvice,
+                rawAdviceContext: rawData.rawAdviceContext
+              })
+            },
+            similarity: r.similarity
+          };
+        });
+  
+        await storage.updateMessage(messages[0].id, {
+          metadata: {
+            displayEntries: mappedEntries,
+            confidenceAnalysis
+          }
+        });
+        console.log("Successfully stored confidence analysis in message metadata");
+      } catch (storageError) {
+        // Log storage errors but don't fail the response generation for them
+        console.error("Error storing confidence metadata:", storageError);
+      }
     }
 
-    // Enhance the prompt to ensure comprehensive coverage
+    // Continue using the original context prompt for Stage 1 (without confidence-based instructions)
     const contextPrompt = `You are analyzing a query about "${query}" and need to provide Heidi Roizen's expert advice.
-
-First, identify the underlying business challenges and implicit questions in this query.
 
 Here are relevant advice entries from Heidi's knowledge base:
 
@@ -359,26 +466,23 @@ Context: ${result.entry.adviceContext}
 Source: ${result.entry.sourceTitle}
 SourceType: ${result.entry.sourceType}
 Link: ${result.entry.sourceLink}
+SourceSummary: ${result.entry.sourceSummary || ""}
 `,
   )
   .join("\n")}
 
-Consider:
-1. How these entries relate to each other and to the query "${query}"
-2. Which specific examples or personal anecdotes would be most illustrative
-3. What actionable advice emerges from combining these insights
+
 
 Important guidelines:
-1. Get straight to the point with clear, actionable advice
-3. Avoid excessive context-setting or lengthy introductions
-5. Use Heidi's direct, conversational tone
+1. Avoid excessive context-setting or lengthy introductions
+2. Use Heidi's direct, conversational tone
 
 Create a comprehensive response that synthesizes Heidi's most relevant insights while preserving all important context and examples.`;
 
     const completion = await anthropic.messages.create({
       model: "claude-3-7-sonnet-20250219",
       max_tokens: 2000,
-      temperature: 0.6,
+      temperature: 0.5,
       system: STAGE1_SYSTEM_PROMPT,
       messages: [{ role: "user", content: contextPrompt }],
     });
@@ -391,8 +495,14 @@ Create a comprehensive response that synthesizes Heidi's most relevant insights 
     // Use type assertion to handle the text content
     return (completion.content[0] as any).text;
   } catch (error: any) {
-    console.error("Stage 1 generation failed:", error);
-    throw new Error(`Stage 1 generation failed: ${error.message}`);
+    // Log detailed error info and rethrow to fail the response generation
+    if (error.message && error.message.includes("confidence")) {
+      console.error(`Confidence calculation error for query "${query}":`, error);
+      throw new Error(`Response generation failed due to confidence calculation error: ${error.message}`);
+    } else {
+      console.error("Stage 1 generation failed:", error);
+      throw new Error(`Stage 1 generation failed: ${error.message}`);
+    }
   }
 }
 
@@ -403,6 +513,10 @@ export async function generateStage2Response(
   try {
     if (typeof stage1Response !== "string") {
       throw new Error("Invalid Stage 1 response type");
+    }
+
+    if (stage1Response.trim() === "") {
+      throw new Error("Stage 1 response is empty");
     }
 
     // If it's a no-results response, return it directly without transformation
@@ -427,19 +541,49 @@ export async function generateStage2Response(
       };
     }
 
-    if (stage1Response.trim() === "") {
-      throw new Error("Stage 1 response is empty");
+    // Get confidence level from metadata if available
+    let confidenceLevel = "unknown";
+    try {
+      const messages = await storage.getLatestMessages(1);
+      if (messages.length > 0 && messages[0].metadata?.confidenceAnalysis) {
+        const analysis = messages[0].metadata.confidenceAnalysis;
+        confidenceLevel = analysis.level;
+        
+        // Debug log to see confidence and first part of response
+        console.log("\n=== Stage 2 Debug Info ===");
+        console.log(`Query: "${query}"`);
+        console.log(`Confidence Level: ${confidenceLevel}`);
+        console.log(`Full Details: ${analysis.level} (weighted: ${analysis.weightedScore.toFixed(3)}, top: ${analysis.topScore.toFixed(3)})`);
+        console.log("First 150 chars of Stage 1 response:", stage1Response.slice(0, 150));
+        console.log("========================\n");
+      } else {
+        console.warn("No confidence analysis found in metadata - Stage 1 may have skipped confidence calculation");
+      }
+    } catch (error) {
+      console.error("Error retrieving confidence info:", error);
     }
+
+    // Debug log the exact prompt being sent to Claude
+    const promptContent = `APPLY ${confidenceLevel.toUpperCase()} STYLE GUIDELINES FROM SYSTEM PROMPT
+
+Original query: "${query}"
+
+Stage 1 response to transform:
+
+${stage1Response}`;
+    console.log("\n=== Prompt to Claude ===");
+    console.log("Confidence instruction:", `APPLY ${confidenceLevel.toUpperCase()} STYLE GUIDELINES FROM SYSTEM PROMPT`);
+    console.log("========================\n");
 
     const stream = await anthropic.messages.create({
       model: "claude-3-7-sonnet-20250219",
       max_tokens: 2000,
-      temperature: 0.7,
+      temperature: 0.6,
       system: STAGE2_SYSTEM_PROMPT,
       messages: [
         { 
           role: "user", 
-          content: `Original query: "${query}"\n\nStage 1 response to transform:\n\n${stage1Response}` 
+          content: promptContent
         }
       ],
       stream: true

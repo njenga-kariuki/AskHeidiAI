@@ -11,6 +11,7 @@ interface RelatedInsight {
     sourceTitle: string;
     sourceType?: string;
     sourceLink: string;
+    sourceSummary?: string;
     rawAdvice?: string;
     rawAdviceContext?: string;
   };
@@ -70,18 +71,25 @@ export default function RelatedInsights({ insights }: RelatedInsightsProps) {
                         </div>
                       )}
                       {item.entry.sourceLink && (
-                        <div className="mt-4 flex items-center gap-2">
-                          <a
-                            href={item.entry.sourceLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {item.entry.sourceTitle}
-                            {item.entry.sourceType && <span className="text-threshold-text-muted">({item.entry.sourceType})</span>}
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
+                        <div className="mt-4">
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={item.entry.sourceLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {item.entry.sourceTitle}
+                              {item.entry.sourceType && <span className="text-threshold-text-muted">({item.entry.sourceType})</span>}
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                          {item.entry.sourceSummary && (
+                            <div className="mt-1 text-xs text-threshold-text-muted [text-transform:initial] pl-2 border-l-2 border-gray-100">
+                              {item.entry.sourceSummary}
+                            </div>
+                          )}
                         </div>
                       )}
                     </>

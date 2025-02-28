@@ -14,6 +14,7 @@ interface RawCSVRow {
   SourceType: string;
   SourceLink: string;
   MsgSourceTitle?: string;
+  SourceSummary?: string;
 }
 
 function isValidRawRow(row: unknown): row is RawCSVRow {
@@ -26,7 +27,8 @@ function isValidRawRow(row: unknown): row is RawCSVRow {
     typeof r?.SourceTitle === 'string' &&
     typeof r?.SourceType === 'string' &&
     typeof r?.SourceLink === 'string' &&
-    (r?.MsgSourceTitle === undefined || typeof r?.MsgSourceTitle === 'string')
+    (r?.MsgSourceTitle === undefined || typeof r?.MsgSourceTitle === 'string') &&
+    (r?.SourceSummary === undefined || typeof r?.SourceSummary === 'string')
   );
 }
 
@@ -176,6 +178,7 @@ export class DataLoader {
             sourceType: row.SourceType.trim(),
             sourceLink: row.SourceLink.trim(),
             msgSourceTitle: row.MsgSourceTitle?.trim(),
+            sourceSummary: row.SourceSummary?.trim(),
             rawAdvice: row.Advice,
             rawAdviceContext: row.AdviceContext
           };
@@ -240,6 +243,7 @@ export class DataLoader {
         sourceType: entry.sourceType,
         sourceLink: entry.sourceLink,
         msgSourceTitle: entry.msgSourceTitle,
+        sourceSummary: entry.sourceSummary,
       };
 
       return processedEntry;
@@ -284,6 +288,21 @@ export class DataLoader {
     };
   }
 
+  private calculateCounts(): { categoryCounts: Record<string, number>, subCategoryCounts: Record<string, number> } {
+    const categoryCounts: Record<string, number> = {};
+    const subCategoryCounts: Record<string, number> = {};
+
+    this.adviceData.forEach(entry => {
+      // Count categories
+      categoryCounts[entry.category] = (categoryCounts[entry.category] || 0) + 1;
+      
+      // Count subcategories
+      subCategoryCounts[entry.subCategory] = (subCategoryCounts[entry.subCategory] || 0) + 1;
+    });
+
+    return { categoryCounts, subCategoryCounts };
+  }
+
   public searchAdvice(params: {
     query?: string;
     category?: string;
@@ -296,6 +315,10 @@ export class DataLoader {
     from: number;
     to: number;
     totalPages: number;
+    categories: string[];
+    subCategories: string[];
+    categoryCounts: Record<string, number>;
+    subCategoryCounts: Record<string, number>;
   } {
     const { query, category, subCategory, page, pageSize } = params;
     
@@ -362,12 +385,19 @@ export class DataLoader {
     const from = (page - 1) * pageSize;
     const to = Math.min(from + pageSize, total);
 
+    // Get counts
+    const { categoryCounts, subCategoryCounts } = this.calculateCounts();
+
     return {
       entries: filtered.slice(from, to),
       total,
       from: from + 1,
       to,
       totalPages,
+      categories: this.getCategories(),
+      subCategories: this.getSubCategories(),
+      categoryCounts,
+      subCategoryCounts,
     };
   }
 }

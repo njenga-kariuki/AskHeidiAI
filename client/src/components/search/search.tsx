@@ -79,8 +79,13 @@ export default function Search() {
                 <SelectContent>
                   <SelectItem value="all" className="normal-case">All Topics</SelectItem>
                   {data.categories?.map((cat: string) => (
-                    <SelectItem key={cat} value={cat} className="normal-case">
-                      {cat}
+                    <SelectItem key={cat} value={cat} className="normal-case flex justify-between items-center">
+                      <span>{cat}</span>
+                      {data.categoryCounts && (
+                        <span className="text-xs text-threshold-text-muted ml-2">
+                          ({data.categoryCounts[cat]})
+                        </span>
+                      )}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -99,8 +104,13 @@ export default function Search() {
                 <SelectContent>
                   <SelectItem value="all" className="normal-case">All Subtopics</SelectItem>
                   {data.subCategories?.map((subcat: string) => (
-                    <SelectItem key={subcat} value={subcat} className="normal-case">
-                      {subcat}
+                    <SelectItem key={subcat} value={subcat} className="normal-case flex justify-between items-center">
+                      <span>{subcat}</span>
+                      {data.subCategoryCounts && (
+                        <span className="text-xs text-threshold-text-muted ml-2">
+                          ({data.subCategoryCounts[subcat]})
+                        </span>
+                      )}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -156,18 +166,25 @@ export default function Search() {
                         </div>
                       )}
                       {item.sourceLink && (
-                        <div className="mt-4 flex items-center gap-2">
-                          <a
-                            href={item.sourceLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {item.sourceTitle}
-                            {item.sourceType && <span className="text-threshold-text-muted">({item.sourceType})</span>}
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
+                        <div className="mt-4">
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={item.sourceLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {item.sourceTitle}
+                              {item.sourceType && <span className="text-threshold-text-muted">({item.sourceType})</span>}
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                          {item.sourceSummary && (
+                            <div className="mt-1 text-xs text-threshold-text-muted [text-transform:initial] pl-2 border-l-2 border-gray-100">
+                              {item.sourceSummary}
+                            </div>
+                          )}
                         </div>
                       )}
                     </>

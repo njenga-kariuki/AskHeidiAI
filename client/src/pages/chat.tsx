@@ -53,21 +53,17 @@ const formatResponse = (text: string): string => {
       }
     )
     // Convert bullets to list items, preserving links and source types
-    .replace(/•\s*(<a.*?<\/a>)(\s*\([^)]*\))?/g, (match, link, sourceType) => {
-      console.log('Bullet point conversion:', {
-        fullMatch: match,
-        linkContent: link,
-        sourceType: sourceType || '',
-        precedingChar: text.substring(text.indexOf(match) - 1, text.indexOf(match)),
-        followingChar: text.substring(text.indexOf(match) + match.length, text.indexOf(match) + match.length + 1),
-        surroundingContext: text.substring(
-          Math.max(0, text.indexOf(match) - 20),
-          Math.min(text.length, text.indexOf(match) + match.length + 20)
-        )
-      });
-      
-      return `<li>${link}${sourceType || ''}</li>`;
-    });
+    .replace(
+      /•\s*(<a.*?<\/a>)(\s*\([^)]*\))?(?:-([^<]*))?(?=<br|$)/g,
+      function(match, link, sourceType, summary) {
+        // Ensure consistent text size class for all summaries
+        return '<li>' + link + (sourceType || '') + 
+               (summary ? ' - <span class="text-sm text-gray-500">' + summary.trim() + '</span>' : '') + 
+               '</li>';
+      }
+    )
+    // Clean up any line breaks between bullet points and ensure consistent spacing
+    .replace(/(<\/li>)\s*<br \/>\s*(•|<li>)/g, '$1$2');
 
   return formatted;
 };

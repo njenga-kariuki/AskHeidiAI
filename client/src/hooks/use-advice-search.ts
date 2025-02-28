@@ -45,7 +45,17 @@ export function useAdviceSearch({
   });
 
   return {
-    data: data ?? { entries: [], categories: [], subCategories: [], total: 0, from: 0, to: 0, totalPages: 0 },
+    data: data ?? { 
+      entries: [], 
+      categories: [], 
+      subCategories: [], 
+      categoryCounts: {}, 
+      subCategoryCounts: {}, 
+      total: 0, 
+      from: 0, 
+      to: 0, 
+      totalPages: 0 
+    },
     isLoading,
     error
   };

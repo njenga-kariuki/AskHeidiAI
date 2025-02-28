@@ -2,6 +2,16 @@ import { pgTable, text, serial, timestamp, json, boolean } from "drizzle-orm/pg-
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Define the confidence analysis schema
+export const confidenceAnalysisSchema = z.object({
+  level: z.enum(['high_confidence', 'medium_confidence', 'low_confidence']),
+  weightedScore: z.number(),
+  countAboveThreshold: z.number(),
+  topScore: z.number(),
+  categoryConsistency: z.boolean(),
+  explanation: z.string()
+});
+
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
   query: text("query").notNull(),
@@ -19,9 +29,18 @@ export const messages = pgTable("messages", {
         sourceTitle: string;
         sourceType?: string;
         sourceLink: string;
+        sourceSummary?: string;
       };
       similarity: number;
     }[];
+    confidenceAnalysis?: {
+      level: 'high_confidence' | 'medium_confidence' | 'low_confidence';
+      weightedScore: number;
+      countAboveThreshold: number;
+      topScore: number;
+      categoryConsistency: boolean;
+      explanation: string;
+    };
   }>(),
   thumbsUp: boolean("thumbs_up"),
   feedback: text("feedback"),
@@ -46,6 +65,7 @@ export const adviceEntrySchema = z.object({
   sourceType: z.string(),
   sourceLink: z.string(),
   msgSourceTitle: z.string().optional(),
+  sourceSummary: z.string().optional(),
 });
 
 // New schema for search display that preserves original formatting
@@ -58,6 +78,8 @@ export const searchResponseSchema = z.object({
   entries: z.array(searchAdviceEntrySchema),
   categories: z.array(z.string()),
   subCategories: z.array(z.string()),
+  categoryCounts: z.record(z.string(), z.number()),
+  subCategoryCounts: z.record(z.string(), z.number()),
   total: z.number(),
   from: z.number(),
   to: z.number(),

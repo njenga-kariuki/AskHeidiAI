@@ -7,7 +7,15 @@ import type { Message } from "@shared/schema";
 const formatResponse = (text: string): string => {
   if (!text) return "";
   
-  return text
+  console.log("ORIGINAL TEXT:", text);
+  
+  // Extract source links section for analysis
+  const sourceSection = text.match(/For more insights, check out:[\s\S]*?(?=\n\n|$)/);
+  if (sourceSection) {
+    console.log("SOURCE SECTION:", sourceSection[0]);
+  }
+  
+  const result = text
     // Replace double newlines with paragraph breaks
     .replace(/\n\n/g, '</p><p>')
     // Replace single newlines with <br />
@@ -20,12 +28,23 @@ const formatResponse = (text: string): string => {
     // Handle the "For more insights" section and source links
     .replace(
       /<p>For more insights, check out:<br \/>(.*?)(?=<p>|$)/g,
-      '<div class="mt-4"><span class="font-medium">For more insights, check out:</span><ul class="pl-5 mt-0">$1</ul></div>'
+      function(match, sourceLinks) {
+        console.log("MATCHED SOURCE LINKS SECTION:", sourceLinks);
+        return '<div class="mt-4"><span class="font-medium">For more insights, check out:</span><ul class="pl-5 mt-0">' + sourceLinks + '</ul></div>';
+      }
     )
      // Convert bullets to list items, preserving links and source types
-     .replace(/•\s*(<a.*?<\/a>)(\s*\([^)]*\))?/g, '<li>$1$2</li>')
+     .replace(/•\s*(<a.*?<\/a>)(\s*\([^)]*\))?(?:-([^<]*))?(?=<br|$)/g, function(match, link, sourceType, summary) {
+       console.log("BULLET MATCH:", {match, link, sourceType, summary});
+       return '<li>' + link + (sourceType || '') + 
+              (summary ? ' - <span class="text-gray-500 text-sm">' + summary + '</span>' : '') + 
+              '</li>';
+     })
     // Clean up any line breaks between bullet points
     .replace(/(<\/li>)\s*<br \/>\s*(•|<li>)/g, '$1$2');
+  
+  console.log("FINAL HTML:", result);
+  return result;
 };
 
 interface ChatMessageProps {
