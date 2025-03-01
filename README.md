@@ -1,27 +1,51 @@
-# Ask Heidi: Custom-Built AI Startup Advisory Platform
+# Ask Heidi: Custom-Built Startup Advice Platform
 
-An advanced AI advisory platform that leverages Heidi Roizen's entrepreneurial wisdom through semantic search and AI-powered response generation.
+A purpose-built platform that scales access to Heidi Roizen's entrepreneurial wisdom through a custom-curated chatbot, search, and browse experience.
 
-## Project Overview
+## Try It Out
 
-Heidi AI is a personal project I built from the ground up to create an intelligent advisory system that can provide entrepreneurial guidance based on Heidi Roizen's experiences and insights. Unlike many current AI applications that rely heavily on existing frameworks like LangChain, this project was designed and implemented from first principles, giving me complete control over the architecture and capabilities.
+**[Ask Heidi](https://heidi-ai.replit.app/)** 
 
-The platform combines vector-based semantic search with AI-powered response generation to create a system that can:
+## About Heidi Roizen
 
-1. Interpret user queries about entrepreneurship and startup challenges
-2. Search through a database of Heidi's advice and experiences
-3. Generate helpful, contextually relevant responses in Heidi's distinctive communication style
-4. Provide source attribution for all recommendations
+Heidi Roizen is a prominent venture capitalist with 40+ years of experience as both founder and investor. Having served on more than 40 corporate boards throughout her career, she's one of Silicon Valley's most respected voices in entrepreneurship. Her insights are in high demand from founders seeking guidance on their startup journeys.
 
-## Key Features
+## Project Purpose
 
-- **Custom Vector Search Implementation**: Built a ground-up embedding-based semantic search system without relying on vector database services or LangChain abstractions
-- **Two-Stage Response Generation**: Implements a novel two-stage approach for generating high-quality responses:
-  - Stage 1: Analyzes user queries and identifies the most relevant advice
-  - Stage 2: Reformulates responses to match Heidi's communication style while preserving factual accuracy
-- **Caching System**: Implements efficient caching of embeddings to improve performance and reduce API costs
-- **Streaming Responses**: Delivers responses via streaming for improved user experience
-- **Modern Web Interface**: Clean, responsive UI built with React and Tailwind CSS
+This platform was developed to support a specific business need for Heidi's venture firm, which wanted to launch a companion tool alongside their [Startup Solution](https://threshold.vc/podcast) podcast. The goal was to make Heidi's invaluable startup advice more accessible at scale while maintaining her authentic voice and ensuring responses came exclusively from her own content.
+
+## Solution Overview
+
+The platform provides three ways to access Heidi's entrepreneurial wisdom:
+1. **Custom-Built Chatbot**: Delivers contextually relevant advice in Heidi's authentic voice
+2. **Semantic Search**: Finds specific insights across her collected wisdom
+3. **Browse Experience**: Explore categorized startup advice by topic
+
+Unlike previous attempts by others to create a Heidi chatbot (which failed to meet her quality standards by not exclusively using her content and voice), this implementation maintains complete fidelity to Heidi's actual advice and communication style.
+
+## Development Approach
+
+Rather than using one-click solutions or high-level frameworks like LangChain, I deliberately built this system from first principles:
+
+1. **Hand-Curated Dataset**: I personally reviewed 70+ different sources of Heidi's content across different source types (e.g., blogs, podcasts, youtube videos), developing a specialized workflow to extract key insights and create a dataset of 650+ categorized startup insights.
+
+2. **Designed a Custom Architecture**: By building core components from scratch, I gained precise control over:
+   - The query understanding process
+   - Retrieval mechanisms for finding relevant advice
+   - Response generation that authentically preserves Heidi's voice
+   - Attribution that links advice to original sources
+
+3. **Implemented Specialized Prompting**: Created custom two-stage prompting that ensures responses are both relevant to user queries and faithful to Heidi's communication style.
+
+## Key Technical Features
+
+- **Custom Vector Search Implementation**: Built an embedding-based semantic search system from the ground up
+- **Two-Stage Response Generation**:
+  - Stage 1: Analyzes queries and identifies the most relevant pieces of advice
+  - Stage 2: Generates responses in Heidi's authentic voice with proper attribution
+- **Performance Optimizations**: Embedding caching system, efficient database queries
+- **Streaming Responses**: Enhanced user experience through progressive text generation
+- **Modern Web Interface**: Clean, responsive UI for multiple devices
 
 ## Technical Stack
 
@@ -33,17 +57,7 @@ The platform combines vector-based semantic search with AI-powered response gene
   - OpenAI for embedding generation
 - **Deployment**: PM2 process manager for production reliability
 
-## Why Build From Scratch?
-
-This project was intentionally built without using high-level AI frameworks like LangChain for several reasons:
-
-1. **Deep Understanding**: Building components from first principles provided deeper insights into how modern AI systems work
-2. **Customization**: Complete control over implementation details enabled custom optimizations for this specific use case
-3. **Learning**: Developing a solution from scratch offered valuable learning opportunities about AI system design
-4. **Performance**: Direct implementation allowed for tailored performance optimizations
-5. **Reduced Dependencies**: Minimizing third-party dependencies results in a more maintainable codebase
-
-## Key Implementation Details
+## Implementation Details
 
 - Custom vector search with cosine similarity scoring
 - Two-phase prompt engineering with specialized system prompts
