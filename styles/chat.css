@@ -1,1 +1,19 @@
- 
+e/* Mobile-specific chat input adjustments */
+@media screen and (max-width: 768px) {
+  .chat-input-container {
+    padding-bottom: env(safe-area-inset-bottom);
+    position: sticky;
+    bottom: 0;
+    background: var(--background-color);
+    z-index: 100;
+  }
+}
+
+/* Enhanced keyboard support */
+@supports (top: env(keyboard-inset-height)) {
+  @media screen and (max-width: 768px) {
+    .chat-input-container {
+      margin-bottom: env(keyboard-inset-height, 20px);
+    }
+  }
+} 

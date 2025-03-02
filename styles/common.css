@@ -1,1 +1,20 @@
- 
+/* Mobile-specific touch target improvements */
+@media screen and (max-width: 768px) {
+  .button,
+  .interactive-element,
+  .nav-item,
+  .search-button,
+  .filter-button {
+    min-height: 44px;
+    padding: 12px;
+  }
+  
+  /* Preserve icon sizes while increasing hit area */
+  .icon-button {
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+} 
