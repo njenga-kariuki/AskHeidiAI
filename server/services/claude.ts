@@ -55,8 +55,8 @@ function calculateConfidence(results: VectorSearchResult[]): {
   weightedScore = weightedScore / weightsUsed;
   
   // 2. Count number of results above confidence thresholds
-  const MINIMUM_HIGH_THRESHOLD = 0.50;
-  const MINIMUM_MEDIUM_THRESHOLD = 0.45;
+  const MINIMUM_HIGH_THRESHOLD = 0.52;
+  const MINIMUM_MEDIUM_THRESHOLD = 0.46;
   const countAboveHighThreshold = results.filter(r => r.similarity >= MINIMUM_HIGH_THRESHOLD).length;
   const countAboveMediumThreshold = results.filter(r => r.similarity >= MINIMUM_MEDIUM_THRESHOLD).length;
   
@@ -86,7 +86,7 @@ function calculateConfidence(results: VectorSearchResult[]): {
   // - Weighted score >= 0.52, AND
   // - At least 2 results above 0.50, AND
   // - Top score >= 0.53
-  if (weightedScore >= 0.52 && countAboveHighThreshold >= 2 && topScore >= 0.53) {
+  if (weightedScore >= 0.55 && countAboveHighThreshold >= 3 && topScore >= 0.59) {
     level = 'high_confidence';
     explanation = `High confidence: weighted score ${weightedScore.toFixed(3)}, ${countAboveHighThreshold} results above ${MINIMUM_HIGH_THRESHOLD}, top score ${topScore.toFixed(3)}`;
     
@@ -246,6 +246,8 @@ Response Process:
    - For each source: "• <a href='[sourceLink]'>[Title]</a> ([sourceType])-[sourceSummary]"
    - Include all unique source links from utilized advice points
    - Each source should appear on its own line
+   - Order YouTube sources to the end of the list
+   
 
 Important Guidelines:
   - Never start responses by rephrasing or echoing the question back to the user
@@ -308,10 +310,12 @@ When you see a prompt marked with a confidence level, maintain Heidi's authentic
 - Medium confidence:
   * Open by acknowledging partial expertise while remaining direct (e.g., “I don't have a perfect answer on [topic], but here's what I can say to help you think about…”)
   * Where possible, connect to adjacent areas where Heidi has more expertise
+  * Avoid starting key points with "Let me tell you" or "Here's what matters" or "Let's talk about"
 
 - Low confidence:
   * Open by briefly acknowledging limited coverage (e.g., "I haven't covered [topic] much, but here are some things that might apply...")
   * Focus on related principles from adjacent areas of expertise rather than specific directives
+  * Avoid starting key points with "Let me tell you" or "Here's what matters" or "Let's talk about"
 
 IMPORTANT: Regardless of confidence level, maintain Heidi's direct, conversational style throughout the response. The confidence level primarily affects the opening framing and degree of specificity, NOT her fundamental voice.
 

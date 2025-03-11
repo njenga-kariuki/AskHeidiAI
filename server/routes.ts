@@ -668,9 +668,71 @@ export function registerRoutes(app: Express): Server {
                 <input type="checkbox" id="detailedInsightsView" onchange="toggleDetailedInsightsView()">
                 <span>Detailed Insights View (Split Insights + Final Response)</span>
               </label>
+              <label class="toggle-switch" for="stage1OnlyView">
+                <input type="checkbox" id="stage1OnlyView" onchange="toggleStage1OnlyView()">
+                <span>Stage 1 Only View (Question + Stage 1 Response)</span>
+              </label>
             </div>
             <div id="viewIndicator" class="view-indicator"></div>
             <script>
+              function toggleStage1OnlyView() {
+                const stage1Only = document.getElementById('stage1OnlyView').checked;
+                const simplified = document.getElementById('simplifiedView');
+                const detailedInsights = document.getElementById('detailedInsightsView');
+                
+                // If turning on stage1 only view, turn off other views
+                if (stage1Only) {
+                  if (simplified.checked) {
+                    simplified.checked = false;
+                    toggleSimplifiedView();
+                  }
+                  if (detailedInsights.checked) {
+                    detailedInsights.checked = false;
+                    toggleDetailedInsightsView();
+                  }
+                }
+                
+                // Update toggle button styles
+                document.querySelector('label[for="stage1OnlyView"]').classList.toggle('active', stage1Only);
+                document.querySelector('label[for="simplifiedView"]').classList.toggle('active', false);
+                document.querySelector('label[for="detailedInsightsView"]').classList.toggle('active', false);
+                
+                // Update view indicator
+                const viewIndicator = document.getElementById('viewIndicator');
+                if (stage1Only) {
+                  viewIndicator.textContent = "Stage 1 Only View - Showing Question + Stage 1 Response";
+                  viewIndicator.style.display = 'block';
+                } else if (!simplified.checked && !detailedInsights.checked) {
+                  viewIndicator.style.display = 'none';
+                }
+                
+                // Handle visibility of sections
+                document.querySelectorAll('.advice-section, .selected-advice-section, .other-advice-section, .final-response').forEach(el => {
+                  if (stage1Only) {
+                    el.style.display = 'none';
+                    el.classList.add('hidden-section');
+                  } else {
+                    el.style.display = 'block';
+                    el.classList.remove('hidden-section');
+                  }
+                });
+                
+                // Always show stage1-response in this view
+                document.querySelectorAll('.stage1-response').forEach(el => {
+                  el.style.display = 'block';
+                  el.classList.remove('hidden-section');
+                });
+                
+                // Update print styles
+                const style = document.getElementById('printStage1Styles') || document.createElement('style');
+                style.id = 'printStage1Styles';
+                style.textContent = stage1Only ? 
+                  '@media print { .advice-section, .selected-advice-section, .other-advice-section, .final-response { display: none !important; } .stage1-response { display: block !important; } }' : '';
+                if (!document.getElementById('printStage1Styles')) {
+                  document.head.appendChild(style);
+                }
+              }
+              
               function toggleDetailedInsightsView() {
                 const detailedInsights = document.getElementById('detailedInsightsView').checked;
                 const simplified = document.getElementById('simplifiedView');
@@ -679,6 +741,13 @@ export function registerRoutes(app: Express): Server {
                 if (detailedInsights && simplified.checked) {
                   simplified.checked = false;
                   toggleSimplifiedView();
+                }
+                
+                // If turning on detailed insights view, turn off stage1 only view
+                const stage1Only = document.getElementById('stage1OnlyView');
+                if (detailedInsights && stage1Only.checked) {
+                  stage1Only.checked = false;
+                  toggleStage1OnlyView();
                 }
                 
                 // Update toggle button styles
@@ -736,6 +805,13 @@ export function registerRoutes(app: Express): Server {
                   toggleDetailedInsightsView();
                 }
                 
+                // If turning on simplified view, turn off stage1 only view
+                const stage1Only = document.getElementById('stage1OnlyView');
+                if (simplified && stage1Only.checked) {
+                  stage1Only.checked = false;
+                  toggleStage1OnlyView();
+                }
+                
                 // Update toggle button styles
                 document.querySelector('label[for="simplifiedView"]').classList.toggle('active', simplified);
                 document.querySelector('label[for="detailedInsightsView"]').classList.toggle('active', false);
@@ -779,12 +855,34 @@ export function registerRoutes(app: Express): Server {
                 // Restore toggle states from localStorage
                 const simplifiedView = document.getElementById('simplifiedView');
                 const detailedInsightsView = document.getElementById('detailedInsightsView');
+                const stage1OnlyView = document.getElementById('stage1OnlyView');
                 
                 simplifiedView.checked = localStorage.getItem('simplifiedView') === 'true';
                 detailedInsightsView.checked = localStorage.getItem('detailedInsightsView') === 'true';
+                stage1OnlyView.checked = localStorage.getItem('stage1OnlyView') === 'true';
                 
                 // Initialize display styles
-                if (simplifiedView.checked) {
+                if (stage1OnlyView.checked) {
+                  // Handle stage1 only view
+                  document.querySelectorAll('.advice-section, .selected-advice-section, .other-advice-section, .final-response').forEach(el => {
+                    el.style.display = 'none';
+                    el.classList.add('hidden-section');
+                  });
+                  
+                  // Update toggle button styles and view indicator
+                  document.querySelector('label[for="stage1OnlyView"]').classList.add('active');
+                  const viewIndicator = document.getElementById('viewIndicator');
+                  viewIndicator.textContent = "Stage 1 Only View - Showing Question + Stage 1 Response";
+                  viewIndicator.style.display = 'block';
+                  
+                  // Create print styles
+                  const style = document.getElementById('printStage1Styles') || document.createElement('style');
+                  style.id = 'printStage1Styles';
+                  style.textContent = '@media print { .advice-section, .selected-advice-section, .other-advice-section, .final-response { display: none !important; } .stage1-response { display: block !important; } }';
+                  if (!document.getElementById('printStage1Styles')) {
+                    document.head.appendChild(style);
+                  }
+                } else if (simplifiedView.checked) {
                   document.querySelectorAll('.advice-section, .stage1-response').forEach(el => {
                     el.style.display = 'none';
                     el.classList.add('hidden-section');
@@ -856,6 +954,10 @@ export function registerRoutes(app: Express): Server {
               
               document.getElementById('detailedInsightsView').addEventListener('change', (e) => {
                 localStorage.setItem('detailedInsightsView', e.target.checked);
+              });
+              
+              document.getElementById('stage1OnlyView').addEventListener('change', (e) => {
+                localStorage.setItem('stage1OnlyView', e.target.checked);
               });
             </script>
             <table>
