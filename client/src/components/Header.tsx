@@ -38,7 +38,7 @@ export default function Header() {
           <a href="https://threshold.vc/about" className="threshold-nav-link">About</a>
           <a href="https://threshold.vc/team" className="threshold-nav-link">Team</a>
           <a href="https://threshold.vc/companies" className="threshold-nav-link">Companies</a>
-          <a href="https://threshold.vc/newsroom" className="threshold-nav-link">Newsroom</a>
+          <a href="https://threshold.vc/newsroom" className="threshold-nav-link">News</a>
           <a href="https://threshold.vc/podcast" className="threshold-nav-link">Podcast</a>
         </div>
         <button
@@ -59,7 +59,7 @@ export default function Header() {
           <a href="https://threshold.vc/about" className="threshold-nav-link block w-full text-center py-1">About</a>
           <a href="https://threshold.vc/team" className="threshold-nav-link block w-full text-center py-1">Team</a>
           <a href="https://threshold.vc/companies" className="threshold-nav-link block w-full text-center py-1">Companies</a>
-          <a href="https://threshold.vc/newsroom" className="threshold-nav-link block w-full text-center py-1">Newsroom</a>
+          <a href="https://threshold.vc/newsroom" className="threshold-nav-link block w-full text-center py-1">News</a>
           <a href="https://threshold.vc/podcast" className="threshold-nav-link block w-full text-center py-1">Podcast</a>
         </div>
       )}
