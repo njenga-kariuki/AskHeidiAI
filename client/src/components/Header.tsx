@@ -34,7 +34,7 @@ export default function Header() {
         <a href="https://threshold.vc/" className="threshold-logo-link">
           <img src="/attached_assets/threshold-logo-color.svg" loading="lazy" alt="Threshold logo" />
         </a>
-        <div className="threshold-nav-links flex space-x-4">
+        <div className="threshold-nav-links flex">
           <a href="https://threshold.vc/about" className="threshold-nav-link">About</a>
           <a href="https://threshold.vc/team" className="threshold-nav-link">Team</a>
           <a href="https://threshold.vc/companies" className="threshold-nav-link">Companies</a>
