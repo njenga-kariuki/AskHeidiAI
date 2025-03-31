@@ -8,13 +8,21 @@ export default function Advice() {
   const [mode, setMode] = useState<"chat" | "search">("chat");
 
   return (
-    <div className="min-h-screen bg-threshold-bg-secondary p-4 md:p-8">
+    <div className="min-h-screen bg-white p-4 md:p-8">
       <div className="mx-auto max-w-3xl">
-        <h1 className="mb-2 text-center text-4xl font-semibold text-threshold-orange">
-          Ask Heidi.
+        <h1 
+          className="mb-2 text-center text-4xl font-semibold text-threshold-orange" 
+          style={{ color: '#F26A36' }}
+        >
+          <span className="relative inline-block">
+            Ask Heidi AI
+            <span className="beta-tag absolute left-full top-0 ml-1 -translate-y-px transform text-xs font-light lowercase text-gray-400">
+              beta
+            </span>
+          </span>
         </h1>
         <p className="mb-8 text-center text-threshold-text-primary text-sm leading-relaxed max-w-2xl mx-auto">
-          650+ curated insights on startup success from 40 years as a founder, VC & 40+ boards
+          Curated insights from The Startup Solution podcast, plus Heidi's blog posts, speeches, and interviews
         </p>
 
         <div className="flex justify-center gap-4 mb-6 border-b border-gray-100">

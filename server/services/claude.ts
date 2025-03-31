@@ -84,8 +84,8 @@ function calculateConfidence(results: VectorSearchResult[]): {
   
   // High confidence requires:
   // - Weighted score >= 0.52, AND
-  // - At least 2 results above 0.50, AND
-  // - Top score >= 0.53
+  // - At least 3 results above 0.52, AND
+  // - Top score >= 0.59
   if (weightedScore >= 0.55 && countAboveHighThreshold >= 3 && topScore >= 0.59) {
     level = 'high_confidence';
     explanation = `High confidence: weighted score ${weightedScore.toFixed(3)}, ${countAboveHighThreshold} results above ${MINIMUM_HIGH_THRESHOLD}, top score ${topScore.toFixed(3)}`;
@@ -308,9 +308,10 @@ When you see a prompt marked with a confidence level, maintain Heidi's authentic
   * End with "Remember this:" followed by the key takeaway
 
 - Medium confidence:
-  * Open by acknowledging partial expertise while remaining direct (e.g., “I don't have a perfect answer on [topic], but here's what I can say to help you think about…”)
+  * Open with direct statement connecing the advice entries to the question in a natural way that acknowledges relevance without overstating certainty
+  * Maintain authentic voice while avoiding the strong conviction markers reserved for high confidence responses ("Let me tell you," "Here's what matters," "Let's talk about")
   * Where possible, connect to adjacent areas where Heidi has more expertise
-  * Avoid starting key points with "Let me tell you" or "Here's what matters" or "Let's talk about"
+  * End with practical guidance that acknowledges nuance without undermining the value of the advice
 
 - Low confidence:
   * Open by briefly acknowledging limited coverage (e.g., "I haven't covered [topic] much, but here are some things that might apply...")

@@ -8,6 +8,234 @@
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-sans antialiased bg-white text-foreground;
+  }
+}
+
+/* Threshold Navigation Bar Styles - Namespaced to avoid conflicts */
+.threshold-main-nav {
+  width: 100%;
+  background-color: white;
+  padding: 20px 0;
+  position: relative;
+  z-index: 100;
+}
+
+.threshold-container {
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 0 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.threshold-logo-link {
+  display: inline-block;
+}
+
+.threshold-logo-link img {
+  height: 40px;
+  width: auto;
+}
+
+.threshold-nav-links {
+  display: flex;
+  align-items: center;
+}
+
+.threshold-nav-link {
+  color: #000;
+  text-decoration: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  margin-left: 30px;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.threshold-nav-link:hover {
+  color: #f15a29;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .threshold-container {
+    align-items: flex-start;
+  }
+  
+  .threshold-nav-links {
+    margin-top: 15px;
+    flex-wrap: wrap;
+  }
+  
+  .threshold-nav-link {
+    margin-left: 0;
+    margin-right: 20px;
+    margin-bottom: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .threshold-logo-link img {
+    height: 30px;
+  }
+}
+
+/* Threshold Footer Styles - Namespaced to avoid conflicts */
+.threshold-footer {
+  width: 100%;
+  background-color: #f8f8f8;
+  padding: 60px 0 30px;
+  margin-top: 60px;
+}
+
+/* Make container style specific to the footer */
+.threshold-footer .threshold-container {
+  margin: 0 auto;
+  padding: 0 15px;
+}
+
+.threshold-footer-columns {
+  display: flex;
+  flex-wrap: wrap;
+  position: relative;
+  align-items: flex-start;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.threshold-footer-logo {
+  flex: 0 0 160px;
+  margin-bottom: 30px;
+  margin-right: 30px;
+}
+
+.threshold-footer-logo-link {
+  display: inline-block;
+}
+
+.threshold-logo-mb {
+  height: 40px;
+  width: auto;
+}
+
+.threshold-footer-col {
+  flex: 1;
+  min-width: 160px;
+  margin-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  margin-right: 30px;
+}
+
+.threshold-footer-title {
+  color: #000;
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.threshold-subs {
+  position: relative;
+}
+
+.threshold-footer-link {
+  color: #666;
+  text-decoration: none;
+  font-size: 14px;
+  margin-bottom: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  padding-left: 15px;
+}
+
+.threshold-footer-link:hover, .threshold-footer-title:hover {
+  color: #f15a29;
+}
+
+.threshold-extra {
+  flex: 1.5;
+  margin-right: 0;
+}
+
+.threshold-social {
+  display: flex;
+  margin-bottom: 20px;
+}
+
+.threshold-social-link {
+  margin-right: 15px;
+}
+
+.threshold-social-link img {
+  width: 24px;
+  height: 24px;
+}
+
+/* Reset padding specifically for the terms link inside the extra column */
+.threshold-extra .threshold-small-links {
+  padding-left: 0; 
+}
+
+.threshold-footer-divider {
+  height: 1px;
+  background-color: #f15a29;
+  margin: 15px 0;
+}
+
+.threshold-small-links {
+  font-size: 12px;
+}
+
+.threshold-copyright {
+  color: #999;
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  width: 100%;
+  text-align: right;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #ddd;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .threshold-footer-columns {
+    flex-direction: column;
+  }
+  
+  .threshold-footer-logo {
+    margin-bottom: 10px; 
+    margin-right: 0;
+  }
+
+  .threshold-footer-col {
+    width: 100%;
+    margin-bottom: 10px;
+    margin-right: 0;
+  }
+  
+  .threshold-copyright {
+    position: relative;
+    margin-top: 20px;
+    bottom: auto;
+  }
+}
+
+/* Header Responsive Styles */
+.hamburger-button {
+  display: none; /* Hidden by default (on larger screens) */
+}
+
+/* Apply styles for screens 991px wide or narrower (Tailwind 'lg' breakpoint is 992px) */
+@media (max-width: 991px) {
+  .threshold-nav-links {
+    display: none !important; /* Hide the desktop links */
+  }
+
+  .hamburger-button {
+    display: block; /* Show the hamburger button. Use 'block' or 'inline-block' as needed */
   }
 }

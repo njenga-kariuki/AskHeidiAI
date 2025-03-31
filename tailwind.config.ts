@@ -62,7 +62,7 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
         threshold: {
-          orange: '#f4511e',
+          orange: '#F26A36',
           'orange-light': '#ff7d47',
           'orange-dark': '#b91400',
           text: {

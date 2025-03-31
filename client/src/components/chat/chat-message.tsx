@@ -41,7 +41,9 @@ const formatResponse = (text: string): string => {
               '</li>';
      })
     // Clean up any line breaks between bullet points
-    .replace(/(<\/li>)\s*<br \/>\s*(•|<li>)/g, '$1$2');
+    .replace(/(<\/li>)\s*<br \/>\s*(•|<li>)/g, '$1$2')
+    // Clean up potential trailing line break before closing </ul>
+    .replace(/<br \/>\s*(<\/ul>)/g, '$1');
   
   console.log("FINAL HTML:", result);
   return result;
