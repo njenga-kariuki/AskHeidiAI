@@ -179,23 +179,36 @@ export function registerRoutes(app: Express): Server {
       const limit = Math.min(parseInt(req.query.limit as string) || 25, 100);
       const format = (req.query.format as string)?.toLowerCase() || 'html';
       const showFeedback = req.query.showFeedback === 'true';
+      const currentView = (req.query.view as string) || 'detailed'; // Default to detailed view
       
-      // Get messages and filter for complete ones
+      // Get messages 
       const messages = (await storage.getLatestMessages(limit));
-      const filteredMessages = messages.filter(msg => 
-        msg.stage1Response && msg.finalResponse && msg.metadata?.displayEntries
+      
+      // Initial filter for completed responses
+      let filteredMessages = messages.filter(msg => 
+        msg.stage1Response && msg.finalResponse
       );
+
+      // Further filter if feedback view is selected
+      if (currentView === 'feedback') {
+        filteredMessages = filteredMessages.filter(msg => 
+          // Include if thumbsUp is not null OR feedback text exists
+          msg.thumbsUp !== null || (msg.feedback && msg.feedback.trim() !== '')
+        );
+      }
 
       if (format === 'csv') {
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename=chat-analysis.csv');
         
-        // CSV header for up to 8 advice entries
+        // CSV header - adjust based on max number of prompt entries (up to 8)
         let header = 'Timestamp,Query';
-        for (let i = 1; i <= 8; i++) {
+        const MAX_PROMPT_ENTRIES_CSV = 8; // Define max columns for consistency if needed
+        for (let i = 1; i <= MAX_PROMPT_ENTRIES_CSV; i++) {
           header += `,Advice_${i}_Category_Source,Advice_${i}_Content`;
         }
-        header += ',Other_Advice_Count,Stage_1_Response,Final_Response,Thumbs_Up' + (showFeedback ? ',Feedback' : '') + '\n';
+        // Always include Feedback column in CSV header
+        header += ',Stage_1_Response,Final_Response,Thumbs_Up,Feedback\n'; 
         
         res.write(header);
         
@@ -203,53 +216,10 @@ export function registerRoutes(app: Express): Server {
           const timestamp = message.createdAt?.toISOString() || '';
           const query = message.query.replace(/"/g, '""');
           
-          // Enhanced advice display with ranking and scores
-          const allAdvice = message.metadata?.displayEntries || [];
-          
-          // For the default view, just show the top entries (up to 8)
-          // We don't have a way to know exactly which ones were used in the response
-          const responseAdvice = allAdvice.slice(0, 8);
-          const otherAdvice = allAdvice.slice(8);
-          
-          const selectedAdviceHtml = responseAdvice.map((entry, index) => `
-            <div class="advice-block">
-              <div>
-                <span class="advice-rank">Rank ${index + 1}</span>
-                <span class="advice-metadata">${entry.entry.category} | ${entry.entry.sourceTitle} - Score: ${entry.similarity.toFixed(3)}</span>
-              </div>
-              <div class="advice-content">
-                <span class="advice-text">${entry.entry.advice}</span>
-                <span class="advice-context"> - ${entry.entry.adviceContext}</span>
-              </div>
-            </div>
-          `).join('') || '';
-          
-          const otherAdviceHtml = otherAdvice.map((entry, index) => `
-            <div class="advice-block">
-              <div>
-                <span class="advice-rank">Rank ${allAdvice.indexOf(entry) + 1}</span>
-                <span class="advice-metadata">${entry.entry.category} | ${entry.entry.sourceTitle} - Score: ${entry.similarity.toFixed(3)}</span>
-              </div>
-              <div class="advice-content">
-                <span class="advice-text">${entry.entry.advice}</span>
-                <span class="advice-context"> - ${entry.entry.adviceContext}</span>
-              </div>
-            </div>
-          `).join('') || '';
-          
-          // Original combined advice display - show all response advice items
-          const selectedAdviceOriginal = responseAdvice.map((entry, index) => `
-            <div class="advice-block">
-              <div>
-                <span class="advice-rank">Rank ${index + 1}</span>
-                <span class="advice-metadata">${entry.entry.category} | ${entry.entry.sourceTitle} - Score: ${entry.similarity.toFixed(3)}</span>
-              </div>
-              <div class="advice-content">
-                <span class="advice-text">${entry.entry.advice}</span>
-                <span class="advice-context"> - ${entry.entry.adviceContext}</span>
-              </div>
-            </div>
-          `).join('') || '';
+          // Use promptEntries if available, otherwise fall back gracefully
+          // For CSV, we still need a consistent structure, maybe leave blank or use displayEntries?
+          // Let's prioritize promptEntries and leave blank if not present for CSV consistency.
+          const adviceForCSV = message.metadata?.promptEntries || [];
 
           const stage1Response = (message.stage1Response || '').replace(/"/g, '""');
           const finalResponse = (message.finalResponse || '').replace(/"/g, '""');
@@ -262,29 +232,27 @@ export function registerRoutes(app: Express): Server {
             `"${query}"`
           ];
           
-          // Add advice entries (up to 8 possible entries)
-          responseAdvice.forEach(entry => {
+          // Add advice entries from promptEntries (up to MAX_PROMPT_ENTRIES_CSV)
+          adviceForCSV.slice(0, MAX_PROMPT_ENTRIES_CSV).forEach(entry => {
             const categorySource = `${entry.entry.category} | ${entry.entry.sourceTitle}`;
             const content = `${entry.entry.advice} - ${entry.entry.adviceContext}`;
             row.push(`"${categorySource.replace(/"/g, '""')}"`);
             row.push(`"${content.replace(/"/g, '""').replace(/\n/g, ' ')}"`);
           });
           
-          // Pad with empty entries if less than 8
-          const emptyEntriesNeeded = 8 - responseAdvice.length;
+          // Pad with empty entries if less than MAX_PROMPT_ENTRIES_CSV
+          const emptyEntriesNeeded = MAX_PROMPT_ENTRIES_CSV - adviceForCSV.length;
           for (let i = 0; i < emptyEntriesNeeded * 2; i++) {
             row.push('""');
           }
           
-          // Add remaining fields
-          row.push(`"${otherAdvice.length}"`);
+          // Add remaining fields (Remove Other_Advice_Count)
           row.push(`"${stage1Response}"`);
           row.push(`"${finalResponse}"`);
           row.push(`"${thumbsUp}"`);
           
-          if (showFeedback) {
-            row.push(`"${feedback}"`);
-          }
+          // Always add feedback to CSV row
+          row.push(`"${feedback}"`);
           
           res.write(row.join(',') + '\n');
         });
@@ -300,220 +268,229 @@ export function registerRoutes(app: Express): Server {
             <title>Chat Analysis Report</title>
             <style>
               body { 
-                font-family: Arial, sans-serif; 
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
                 margin: 20px; 
                 max-width: 1400px; 
                 margin: 20px auto; 
-                line-height: 1.4;
-                color: #333;
+                line-height: 1.5; /* Slightly increased line height */
+                color: #212529; /* Darker gray for text */
+                background-color: #f8f9fa; /* Light background for body */
               }
               table { 
                 border-collapse: collapse; 
                 width: 100%; 
-                margin-top: 15px; 
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                margin-top: 20px; /* Increased margin */
+                box-shadow: none; /* Removed shadow */
+                border: 1px solid #dee2e6; /* Lighter table border */
+                border-spacing: 0;
               }
               th, td { 
-                border: 1px solid #ddd; 
-                padding: 12px; 
+                border: none; /* Remove cell borders initially */
+                border-bottom: 1px solid #dee2e6; /* Use bottom borders for rows */
+                padding: 16px; /* Increased padding */
                 text-align: left; 
                 vertical-align: top; 
               }
-              th { background-color: #f4f4f4; }
-              tr:nth-child(even) { background-color: #f9f9f9; }
+              tr:last-child td { 
+                border-bottom: none; /* No border for last row */
+              } 
+              th { 
+                background-color: #e9ecef; /* Lighter header */
+                font-weight: 600;
+                border-bottom-width: 2px; /* Thicker bottom border for header */
+              }
+              tr:nth-child(even) { 
+                background-color: #ffffff; /* White background for even rows */
+              } 
+              tr:nth-child(odd) { 
+                background-color: #f8f9fa; /* Light gray for odd rows (matches body) */
+              }
               .controls { 
-                margin-bottom: 20px; 
-                background-color: #f8f9fa;
-                padding: 15px;
-                border-radius: 6px;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                margin-bottom: 25px; 
+                background-color: #ffffff; /* White background for controls */
+                padding: 1rem 1.5rem; /* More padding */
+                border-radius: 8px; /* Slightly larger radius */
+                border: 1px solid #dee2e6; /* Add border */
+                display: flex; /* Use flexbox for alignment */
+                align-items: center;
+                gap: 15px; /* Spacing between control items */
               }
               .download-btn { 
-                background-color: #4CAF50; 
+                background-color: #0d6efd; /* Bootstrap primary blue */ 
                 color: white; 
-                padding: 10px 20px; 
+                padding: 0.5rem 1rem; 
                 text-decoration: none; 
                 border-radius: 4px; 
+                border: none;
+                font-weight: 500;
                 display: inline-block;
-                margin-right: 10px;
-                transition: background-color 0.2s;
+                transition: background-color 0.15s ease-in-out;
               }
               .download-btn:hover {
-                background-color: #45a049;
+                background-color: #0b5ed7; /* Darker blue on hover */
               }
               .limit-select { 
-                padding: 8px; 
-                margin-right: 10px; 
+                padding: 0.4rem 0.8rem; 
                 border-radius: 4px;
-                border: 1px solid #ddd;
+                border: 1px solid #ced4da;
+                background-color: #fff;
               }
-              .toggle-switch {
+              .view-radio {
+                margin-right: 5px; /* Reduced margin */
                 display: inline-flex;
                 align-items: center;
-                margin-left: 10px;
-                cursor: pointer;
-                padding: 5px 10px;
-                border-radius: 4px;
-                transition: background-color 0.2s;
               }
-              .toggle-switch:hover {
-                background-color: #f0f0f0;
-                text-decoration: none;
-              }
-              .toggle-switch input[type="checkbox"] {
+              .view-radio input[type="radio"] {
                 margin-right: 5px;
-                transform: scale(1.2);
-              }
-              .toggle-switch input[type="checkbox"]:checked + span {
-                font-weight: bold;
-                color: #4CAF50;
-              }
-              .toggle-switch.active {
-                background-color: #e8f5e9;
-                border: 1px solid #4CAF50;
               }
               .view-indicator {
                 display: none;
-                margin-top: 10px;
-                padding: 8px 12px;
-                background-color: #e8f5e9;
+                margin: -10px 0 15px 0; /* Adjust margin */
+                padding: 0.5rem 1rem;
+                background-color: #e2f0fb; /* Light blue indicator */
+                border: 1px solid #cfe2ff; /* Blue border */
                 border-radius: 4px;
-                color: #4CAF50;
-                font-weight: bold;
+                color: #0a58ca; /* Blue text */
+                font-weight: 500; /* Slightly bolder */
                 text-align: center;
               }
               .hidden-section {
                 display: none;
               }
-              .query-section {
-                margin-bottom: 15px;
-                padding-bottom: 10px;
-                border-bottom: 2px solid #eee;
+              /* Section Styling */
+              .query-section,
+              .advice-section,
+              .response-section,
+              .feedback-section { /* Added feedback-section here */
+                margin-bottom: 1rem; 
+                padding: 1rem; 
+                border: 1px solid #e9ecef; /* Lighter border */
+                border-radius: 6px;
+                background-color: #ffffff; /* White background for sections */
               }
+              .query-section { /* Specific style for query section */
+                 border-left: 4px solid #6c757d; /* Gray left border */
+                 padding-left: 1.25rem;
+              }
+               .advice-section { /* Specific style for advice section */
+                 border-left: 4px solid #ffc107; /* Yellow left border */
+                 padding-left: 1.25rem;
+              }
+              .stage1-response { /* Specific style for stage1 */
+                 border-left: 4px solid #adb5bd; /* Lighter Gray left border */
+                 padding-left: 1.25rem;
+              }
+              .final-response { /* Specific style for final */
+                 border-left: 4px solid #198754; /* Green left border */
+                 padding-left: 1.25rem;
+              }
+              .feedback-section { /* Specific style for feedback */
+                 border-left: 4px solid #0dcaf0; /* Cyan left border */
+                 padding-left: 1.25rem;
+                 margin-top: 1rem; /* Ensure margin top */
+                 padding-top: 1rem; /* Ensure padding top */
+                 border-top: none; /* Remove duplicate top border */
+              }
+
               .query-timestamp {
-                color: #666;
-                font-size: 0.9em;
-                margin-bottom: 3px;
+                color: #6c757d; /* Bootstrap secondary text color */
+                font-size: 0.85em;
+                margin-bottom: 5px;
               }
               .query-text {
-                font-size: 1.2em;
-                color: #2c3e50;
-                margin-bottom: 6px;
+                font-size: 1.1em; /* Slightly smaller */
+                color: #212529;
+                margin-bottom: 0;
                 font-weight: 500;
-                padding: 6px;
-                background-color: #f8f9fa;
-                border-radius: 4px;
-                border-left: 3px solid #2c3e50;
+                padding: 0; /* Remove internal padding/background */
+                background-color: transparent;
+                border-radius: 0;
+                border-left: none;
               }
-              .advice-section {
-                margin-bottom: 15px;
-                padding: 12px;
-                background-color: #f8f9fa;
-                border-radius: 6px;
-              }
-              .advice-title {
-                font-weight: bold;
-                color: #2c3e50;
-                margin-bottom: 10px;
-                font-size: 1.1em;
-                padding-bottom: 5px;
-                border-bottom: 1px solid #ddd;
-              }
-              .selected-advice-section {
-                margin-bottom: 15px;
-                padding: 12px;
-                background-color: #f1f8f1;
-                border-radius: 6px;
-                border-left: 3px solid #4CAF50;
-                display: none;
-              }
-              .other-advice-section {
-                margin-bottom: 15px;
-                padding: 12px;
-                background-color: #fff8f0;
-                border-radius: 6px;
-                border-left: 3px solid #FFA500;
-                display: none;
+               .query-confidence {
+                  margin-top: 8px; 
+                  font-size: 0.85em;
+                  color: #6c757d;
+               }
+               .query-confidence strong { font-weight: 600; } 
+               .text-green-700 { color: #198754; } /* Match Bootstrap success */
+               .text-yellow-700 { color: #ffc107; } /* Match Bootstrap warning */
+               .text-red-700 { color: #dc3545; } /* Match Bootstrap danger */
+               .text-gray-500 { color: #6c757d; } /* Match Bootstrap secondary */
+
+              .advice-title,
+              .response-title {
+                font-weight: 600; /* Bolder titles */
+                color: #212529;
+                margin-bottom: 0.75rem;
+                font-size: 1.05em; /* Slightly smaller */
+                padding-bottom: 0.5rem;
+                border-bottom: 1px solid #dee2e6;
               }
               .advice-block {
-                margin-bottom: 12px;
-                padding: 10px;
-                border: 1px solid #eee;
+                margin-bottom: 0.75rem;
+                padding: 0.75rem;
+                border: 1px solid #e9ecef;
                 border-radius: 4px;
-                background-color: white;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                background-color: #f8f9fa; /* Light background for blocks */
+                box-shadow: none;
               }
+               .advice-block:last-child {
+                  margin-bottom: 0;
+               }
               .advice-rank {
-                font-weight: bold;
-                color: #666;
+                font-weight: 500; /* Normal weight */
+                color: #6c757d;
                 display: inline-block;
                 margin-right: 8px;
-                background-color: #f4f4f4;
+                background-color: #e9ecef; /* Lighter background */
                 padding: 2px 6px;
                 border-radius: 3px;
-                font-size: 0.9em;
+                font-size: 0.8em; /* Smaller */
               }
               .advice-metadata {
-                color: #666;
-                font-size: 0.9em;
+                color: #6c757d;
+                font-size: 0.85em; /* Smaller */
                 display: inline-block;
               }
               .advice-content { 
-                margin: 10px 0;
+                margin: 8px 0 0 0; /* Reduced margin */
               }
               .advice-text {
-                color: #2c3e50;
+                color: #212529;
                 display: block;
-                margin-bottom: 6px;
+                margin-bottom: 5px;
               }
               .advice-context {
-                color: #666;
+                color: #6c757d;
                 font-style: italic;
                 display: block;
-                border-left: 2px solid #ddd;
+                border-left: 2px solid #dee2e6;
                 padding-left: 10px;
-                margin-top: 6px;
-              }
-              .response-section {
-                margin-top: 15px;
-                margin-bottom: 15px;
-                padding: 12px;
-                background-color: #f8f9fa;
-                border-radius: 6px;
-                border-left: 3px solid #4CAF50;
-              }
-              .final-response {
-                background-color: #f1f8f1;
-                border-left: 4px solid #4CAF50;
-              }
-              .stage1-response {
-                background-color: #f8f9fa;
-                border-left: 3px solid #6c757d;
-              }
-              .response-title {
-                font-weight: bold;
-                color: #2c3e50;
-                margin-bottom: 12px;
-                font-size: 1.1em;
-                padding-bottom: 6px;
-                border-bottom: 1px solid #ddd;
+                margin-top: 5px;
+                font-size: 0.95em;
               }
               .response-content {
                 white-space: pre-wrap;
-                color: #2c3e50;
+                color: #212529;
                 line-height: 1.5;
-                padding: 10px;
-                background-color: white;
-                border-radius: 4px;
-                border: 1px solid #eee;
+                padding: 0; /* Remove extra padding */
+                background-color: transparent;
+                border-radius: 0;
+                border: none;
               }
-              .feedback-indicator {
-                font-size: 1.2em;
-                margin-top: 15px;
-                text-align: right;
-                padding: 8px;
-                border-top: 1px solid #eee;
+              /* Removed feedback-indicator styles as it's no longer used */
+
+              /* View-specific styles (Screen) */
+              body.view-simplified .advice-section,
+              body.view-simplified .stage1-response {
+                display: none;
               }
+              body.view-feedback .advice-section,
+              body.view-feedback .stage1-response {
+                display: none;
+              }
+              /* Detailed and Stage views show all by default, JS handles fine-tuning if needed */
 
               @media print {
                 @page {
@@ -644,327 +621,111 @@ export function registerRoutes(app: Express): Server {
                   color: #000 !important;
                   text-decoration: underline;
                 }
+
+                /* View-specific styles (Print) */
+                body.view-simplified .advice-section,
+                body.view-simplified .stage1-response {
+                  display: none !important;
+                }
+                body.view-feedback .advice-section,
+                body.view-feedback .stage1-response {
+                  display: none !important;
+                }
+                body.view-stage .stage1-response,
+                body.view-stage .final-response,
+                body.view-stage .advice-section {
+                   display: block !important; /* Ensure all needed are visible */
+                }
+                 body.view-detailed .stage1-response,
+                body.view-detailed .final-response,
+                body.view-detailed .advice-section {
+                   display: block !important; /* Ensure all needed are visible */
+                }
               }
             </style>
           </head>
           <body>
-            <h1>Chat Analysis Report</h1>
+            <h1>Ask Heidi AI Chat Analysis</h1>
             <div class="controls">
-              <a href="?format=csv${req.query.limit ? '&limit=' + req.query.limit : ''}" class="download-btn">Download CSV</a>
-              <select class="limit-select" onchange="window.location.href='?limit=' + this.value">
-                <option value="25" ${limit === 25 ? 'selected' : ''}>Last 25 messages</option>
-                <option value="50" ${limit === 50 ? 'selected' : ''}>Last 50 messages</option>
-                <option value="100" ${limit === 100 ? 'selected' : ''}>Last 100 messages</option>
+              <a href="?format=csv${req.query.limit ? '&limit=' + req.query.limit : ''}${req.query.view ? '&view=' + req.query.view : ''}" class="download-btn">Download CSV</a>
+              <select class="limit-select" onchange="updateQueryParam('limit', this.value)">
+                <option value="25" ${limit === 25 ? 'selected' : ''}>Last 25</option>
+                <option value="50" ${limit === 50 ? 'selected' : ''}>Last 50</option>
+                <option value="100" ${limit === 100 ? 'selected' : ''}>Last 100</option>
               </select>
-              <label>
-                <input type="checkbox" onchange="window.location.href='?' + new URLSearchParams({...Object.fromEntries(new URLSearchParams(window.location.search)), showFeedback: this.checked})" ${showFeedback ? 'checked' : ''}>
-                Show Feedback
+              <span style="margin-left: 20px; font-weight: bold;">View:</span>
+              <label class="view-radio">
+                <input type="radio" name="reportView" value="simplified" onchange="updateQueryParam('view', this.value)" ${currentView === 'simplified' ? 'checked' : ''}>
+                Simplified
               </label>
-              <label class="toggle-switch" for="simplifiedView">
-                <input type="checkbox" id="simplifiedView" onchange="toggleSimplifiedView()">
-                <span>Simplified View (Final Response Only)</span>
+              <label class="view-radio">
+                <input type="radio" name="reportView" value="detailed" onchange="updateQueryParam('view', this.value)" ${currentView === 'detailed' ? 'checked' : ''}>
+                Detailed
               </label>
-              <label class="toggle-switch" for="detailedInsightsView">
-                <input type="checkbox" id="detailedInsightsView" onchange="toggleDetailedInsightsView()">
-                <span>Detailed Insights View (Split Insights + Final Response)</span>
-              </label>
-              <label class="toggle-switch" for="stage1OnlyView">
-                <input type="checkbox" id="stage1OnlyView" onchange="toggleStage1OnlyView()">
-                <span>Stage 1 Only View (Question + Stage 1 Response)</span>
+              <label class="view-radio">
+                <input type="radio" name="reportView" value="feedback" onchange="updateQueryParam('view', this.value)" ${currentView === 'feedback' ? 'checked' : ''}>
+                Feedback
               </label>
             </div>
             <div id="viewIndicator" class="view-indicator"></div>
             <script>
-              function toggleStage1OnlyView() {
-                const stage1Only = document.getElementById('stage1OnlyView').checked;
-                const simplified = document.getElementById('simplifiedView');
-                const detailedInsights = document.getElementById('detailedInsightsView');
-                
-                // If turning on stage1 only view, turn off other views
-                if (stage1Only) {
-                  if (simplified.checked) {
-                    simplified.checked = false;
-                    toggleSimplifiedView();
-                  }
-                  if (detailedInsights.checked) {
-                    detailedInsights.checked = false;
-                    toggleDetailedInsightsView();
-                  }
+              // Helper function to update URL query parameters and reload
+              function updateQueryParam(key, value) {
+                const url = new URL(window.location.href);
+                if (value === false || value === '' || value === null) {
+                  url.searchParams.delete(key);
+                } else {
+                  url.searchParams.set(key, value);
                 }
-                
-                // Update toggle button styles
-                document.querySelector('label[for="stage1OnlyView"]').classList.toggle('active', stage1Only);
-                document.querySelector('label[for="simplifiedView"]').classList.toggle('active', false);
-                document.querySelector('label[for="detailedInsightsView"]').classList.toggle('active', false);
-                
-                // Update view indicator
-                const viewIndicator = document.getElementById('viewIndicator');
-                if (stage1Only) {
-                  viewIndicator.textContent = "Stage 1 Only View - Showing Question + Stage 1 Response";
-                  viewIndicator.style.display = 'block';
-                } else if (!simplified.checked && !detailedInsights.checked) {
-                  viewIndicator.style.display = 'none';
-                }
-                
-                // Handle visibility of sections
-                document.querySelectorAll('.advice-section, .selected-advice-section, .other-advice-section, .final-response').forEach(el => {
-                  if (stage1Only) {
-                    el.style.display = 'none';
-                    el.classList.add('hidden-section');
-                  } else {
-                    el.style.display = 'block';
-                    el.classList.remove('hidden-section');
-                  }
-                });
-                
-                // Always show stage1-response in this view
-                document.querySelectorAll('.stage1-response').forEach(el => {
-                  el.style.display = 'block';
-                  el.classList.remove('hidden-section');
-                });
-                
-                // Update print styles
-                const style = document.getElementById('printStage1Styles') || document.createElement('style');
-                style.id = 'printStage1Styles';
-                style.textContent = stage1Only ? 
-                  '@media print { .advice-section, .selected-advice-section, .other-advice-section, .final-response { display: none !important; } .stage1-response { display: block !important; } }' : '';
-                if (!document.getElementById('printStage1Styles')) {
-                  document.head.appendChild(style);
-                }
+                window.location.href = url.toString();
               }
               
-              function toggleDetailedInsightsView() {
-                const detailedInsights = document.getElementById('detailedInsightsView').checked;
-                const simplified = document.getElementById('simplifiedView');
+              // Function to apply styles based on view (will be filled in next step)
+              function applyViewStyles(view) {
+                console.log("Applying styles for view:", view);
+                // Add view class to body for CSS targeting (including print)
+                document.body.className = 'view-' + view;
                 
-                // If turning on detailed insights view, turn off simplified view
-                if (detailedInsights && simplified.checked) {
-                  simplified.checked = false;
-                  toggleSimplifiedView();
-                }
-                
-                // If turning on detailed insights view, turn off stage1 only view
-                const stage1Only = document.getElementById('stage1OnlyView');
-                if (detailedInsights && stage1Only.checked) {
-                  stage1Only.checked = false;
-                  toggleStage1OnlyView();
-                }
-                
-                // Update toggle button styles
-                document.querySelector('label[for="detailedInsightsView"]').classList.toggle('active', detailedInsights);
-                document.querySelector('label[for="simplifiedView"]').classList.toggle('active', false);
-                
-                // Update view indicator
                 const viewIndicator = document.getElementById('viewIndicator');
-                if (detailedInsights) {
-                  viewIndicator.textContent = "Detailed Insights View - Showing Split Insights + Final Response";
-                  viewIndicator.style.display = 'block';
-                } else if (!simplified.checked) {
-                  viewIndicator.style.display = 'none';
-                }
-                
-                // Toggle detailed insights sections
-                document.querySelectorAll('.selected-advice-section, .other-advice-section').forEach(el => {
-                  if (detailedInsights) {
-                    el.style.display = 'block';
-                    el.classList.remove('hidden-section');
-                  } else {
-                    el.style.display = 'none';
-                    el.classList.add('hidden-section');
-                  }
-                });
-                
-                // Toggle regular advice section and stage1 response
-                document.querySelectorAll('.advice-section, .stage1-response').forEach(el => {
-                  if (detailedInsights) {
-                    el.style.display = 'none';
-                    el.classList.add('hidden-section');
-                  } else {
-                    el.style.display = 'block';
-                    el.classList.remove('hidden-section');
-                  }
-                });
-                
-                // Update print styles for detailed view
-                const style = document.getElementById('printDetailedStyles') || document.createElement('style');
-                style.id = 'printDetailedStyles';
-                style.textContent = detailedInsights ? 
-                  '@media print { .advice-section, .stage1-response { display: none !important; } .selected-advice-section, .other-advice-section { display: block !important; } }' : '';
-                if (!document.getElementById('printDetailedStyles')) {
-                  document.head.appendChild(style);
-                }
-              }
-              
-              function toggleSimplifiedView() {
-                const simplified = document.getElementById('simplifiedView').checked;
-                const detailedInsights = document.getElementById('detailedInsightsView');
-                
-                // If turning on simplified view, turn off detailed insights view
-                if (simplified && detailedInsights.checked) {
-                  detailedInsights.checked = false;
-                  toggleDetailedInsightsView();
-                }
-                
-                // If turning on simplified view, turn off stage1 only view
-                const stage1Only = document.getElementById('stage1OnlyView');
-                if (simplified && stage1Only.checked) {
-                  stage1Only.checked = false;
-                  toggleStage1OnlyView();
-                }
-                
-                // Update toggle button styles
-                document.querySelector('label[for="simplifiedView"]').classList.toggle('active', simplified);
-                document.querySelector('label[for="detailedInsightsView"]').classList.toggle('active', false);
-                
-                // Update view indicator
-                const viewIndicator = document.getElementById('viewIndicator');
-                if (simplified) {
-                  viewIndicator.textContent = "Simplified View - Showing Final Response Only";
-                  viewIndicator.style.display = 'block';
-                } else if (!detailedInsights.checked) {
-                  viewIndicator.style.display = 'none';
-                }
-                
-                // Handle visibility of sections
-                document.querySelectorAll('.advice-section, .stage1-response').forEach(el => {
-                  if (simplified) {
-                    el.style.display = 'none';
-                    el.classList.add('hidden-section');
-                  } else {
-                    el.style.display = 'block';
-                    el.classList.remove('hidden-section');
-                  }
-                });
-                
-                // Update Stage 2 header text in simplified view
-                document.querySelectorAll('.final-response .response-title').forEach(el => {
-                  el.textContent = simplified ? 'Final Response' : 'Stage 2 Response - Style Narrative';
+                let indicatorText = '';
+
+                // Define visibility for each section based on view
+                const showAdvice = (view === 'detailed' || view === 'stage');
+                const showStage1 = (view === 'detailed' || view === 'stage');
+                const showFinalResponse = (view === 'simplified' || view === 'detailed' || view === 'stage' || view === 'feedback');
+
+                document.querySelectorAll('.report-entry').forEach(row => {
+                  const adviceSection = row.querySelector('.advice-section');
+                  const stage1Section = row.querySelector('.stage1-response');
+                  const finalSection = row.querySelector('.final-response');
+                  
+                  if (adviceSection) adviceSection.style.display = showAdvice ? 'block' : 'none';
+                  if (stage1Section) stage1Section.style.display = showStage1 ? 'block' : 'none';
+                  if (finalSection) finalSection.style.display = showFinalResponse ? 'block' : 'none';
                 });
 
-                // Update print styles
-                const style = document.getElementById('printStyles') || document.createElement('style');
-                style.id = 'printStyles';
-                style.textContent = simplified ? 
-                  '@media print { .advice-section, .stage1-response, .selected-advice-section, .other-advice-section { display: none !important; } }' : '';
-                if (!document.getElementById('printStyles')) {
-                  document.head.appendChild(style);
-                }
-              }
-              
-              document.addEventListener('DOMContentLoaded', function() {
-                // Restore toggle states from localStorage
-                const simplifiedView = document.getElementById('simplifiedView');
-                const detailedInsightsView = document.getElementById('detailedInsightsView');
-                const stage1OnlyView = document.getElementById('stage1OnlyView');
-                
-                simplifiedView.checked = localStorage.getItem('simplifiedView') === 'true';
-                detailedInsightsView.checked = localStorage.getItem('detailedInsightsView') === 'true';
-                stage1OnlyView.checked = localStorage.getItem('stage1OnlyView') === 'true';
-                
-                // Initialize display styles
-                if (stage1OnlyView.checked) {
-                  // Handle stage1 only view
-                  document.querySelectorAll('.advice-section, .selected-advice-section, .other-advice-section, .final-response').forEach(el => {
-                    el.style.display = 'none';
-                    el.classList.add('hidden-section');
-                  });
-                  
-                  // Update toggle button styles and view indicator
-                  document.querySelector('label[for="stage1OnlyView"]').classList.add('active');
-                  const viewIndicator = document.getElementById('viewIndicator');
-                  viewIndicator.textContent = "Stage 1 Only View - Showing Question + Stage 1 Response";
-                  viewIndicator.style.display = 'block';
-                  
-                  // Create print styles
-                  const style = document.getElementById('printStage1Styles') || document.createElement('style');
-                  style.id = 'printStage1Styles';
-                  style.textContent = '@media print { .advice-section, .selected-advice-section, .other-advice-section, .final-response { display: none !important; } .stage1-response { display: block !important; } }';
-                  if (!document.getElementById('printStage1Styles')) {
-                    document.head.appendChild(style);
-                  }
-                } else if (simplifiedView.checked) {
-                  document.querySelectorAll('.advice-section, .stage1-response').forEach(el => {
-                    el.style.display = 'none';
-                    el.classList.add('hidden-section');
-                  });
-                  
-                  document.querySelectorAll('.final-response .response-title').forEach(el => {
-                    el.textContent = 'Final Response';
-                  });
-                  
-                  // Update toggle button styles and view indicator
-                  document.querySelector('label[for="simplifiedView"]').classList.add('active');
-                  const viewIndicator = document.getElementById('viewIndicator');
-                  viewIndicator.textContent = "Simplified View - Showing Final Response Only";
-                  viewIndicator.style.display = 'block';
-                } else if (detailedInsightsView.checked) {
-                  // Hide regular advice section and stage1 response
-                  document.querySelectorAll('.advice-section, .stage1-response').forEach(el => {
-                    el.style.display = 'none';
-                    el.classList.add('hidden-section');
-                  });
-                  
-                  // Show detailed insights sections
-                  document.querySelectorAll('.selected-advice-section, .other-advice-section').forEach(el => {
-                    el.style.display = 'block';
-                    el.classList.remove('hidden-section');
-                  });
-                  
-                  // Update toggle button styles and view indicator
-                  document.querySelector('label[for="detailedInsightsView"]').classList.add('active');
-                  const viewIndicator = document.getElementById('viewIndicator');
-                  viewIndicator.textContent = "Detailed Insights View - Showing Split Insights + Final Response";
+                // Set indicator text
+                if (view === 'simplified') indicatorText = 'Simplified View: Query & Final Response';
+                else if (view === 'detailed') indicatorText = 'Detailed View: Query, Advice, Stage 1, Final Response';
+                else if (view === 'feedback') indicatorText = 'Feedback View: Showing only entries with feedback text';
+
+                if (view !== 'detailed') { // Show indicator for non-default views
+                  viewIndicator.textContent = indicatorText;
                   viewIndicator.style.display = 'block';
                 } else {
-                  // Default view - ensure proper order and visibility
-                  document.querySelectorAll('.advice-section, .stage1-response, .final-response').forEach(el => {
-                    el.style.display = 'block';
-                    el.classList.remove('hidden-section');
-                  });
-                  
-                  document.querySelectorAll('.selected-advice-section, .other-advice-section').forEach(el => {
-                    el.style.display = 'none';
-                    el.classList.add('hidden-section');
-                  });
-                  
-                  document.querySelectorAll('.final-response .response-title').forEach(el => {
-                    el.textContent = 'Stage 2 Response - Style Narrative';
-                  });
-                  
-                  const viewIndicator = document.getElementById('viewIndicator');
                   viewIndicator.style.display = 'none';
                 }
-                
-                // Initialize print styles
-                const style = document.getElementById('printStyles') || document.createElement('style');
-                style.id = 'printStyles';
-                style.textContent = simplifiedView.checked ? 
-                  '@media print { .advice-section, .stage1-response, .selected-advice-section, .other-advice-section { display: none !important; } }' : 
-                  (detailedInsightsView.checked ? 
-                    '@media print { .advice-section, .stage1-response { display: none !important; } .selected-advice-section, .other-advice-section { display: block !important; } }' : '');
-                if (!document.getElementById('printStyles')) {
-                  document.head.appendChild(style);
-                }
-              });
-              
-              // Save toggle state to localStorage
-              document.getElementById('simplifiedView').addEventListener('change', (e) => {
-                localStorage.setItem('simplifiedView', e.target.checked);
-              });
-              
-              document.getElementById('detailedInsightsView').addEventListener('change', (e) => {
-                localStorage.setItem('detailedInsightsView', e.target.checked);
-              });
-              
-              document.getElementById('stage1OnlyView').addEventListener('change', (e) => {
-                localStorage.setItem('stage1OnlyView', e.target.checked);
+              }
+
+              document.addEventListener('DOMContentLoaded', function() {
+                const currentView = new URLSearchParams(window.location.search).get('view') || 'detailed';
+                applyViewStyles(currentView);
               });
             </script>
             <table>
               <thead class="print-once">
                 <tr>
                   <th class="no-print">Chat Analysis</th>
-                  ${showFeedback ? '<th class="no-print">Feedback</th>' : ''}
                 </tr>
               </thead>
               <tbody>
@@ -973,46 +734,23 @@ export function registerRoutes(app: Express): Server {
         filteredMessages.forEach(message => {
           const timestamp = message.createdAt ? new Date(message.createdAt).toLocaleString() : '';
           
-          // Enhanced advice display with ranking and scores
-          const allAdvice = message.metadata?.displayEntries || [];
+          // Use promptEntries if available, otherwise use displayEntries for older messages
+          const adviceEntries = message.metadata?.promptEntries || message.metadata?.displayEntries || [];
+          // Determine title based on which data source was used
+          const adviceTitle = message.metadata?.promptEntries 
+            ? `Advice Sent to AI (${adviceEntries.length})` 
+            : message.metadata?.displayEntries 
+              ? `Top Advice Retrieved (${adviceEntries.length})` // Title for fallback
+              : 'Advice Data Unavailable';
           
-          // For the default view, just show the top entries (up to 8)
-          // We don't have a way to know exactly which ones were used in the response
-          const responseAdvice = allAdvice.slice(0, 8);
-          const otherAdvice = allAdvice.slice(8);
-          
-          const selectedAdviceHtml = responseAdvice.map((entry, index) => `
+          // Generate HTML for the advice items (use rank for displayEntries fallback)
+          const adviceHtml = adviceEntries.map((entry, index) => `
             <div class="advice-block">
               <div>
-                <span class="advice-rank">Rank ${index + 1}</span>
-                <span class="advice-metadata">${entry.entry.category} | ${entry.entry.sourceTitle} - Score: ${entry.similarity.toFixed(3)}</span>
-              </div>
-              <div class="advice-content">
-                <span class="advice-text">${entry.entry.advice}</span>
-                <span class="advice-context"> - ${entry.entry.adviceContext}</span>
-              </div>
-            </div>
-          `).join('') || '';
-          
-          const otherAdviceHtml = otherAdvice.map((entry, index) => `
-            <div class="advice-block">
-              <div>
-                <span class="advice-rank">Rank ${allAdvice.indexOf(entry) + 1}</span>
-                <span class="advice-metadata">${entry.entry.category} | ${entry.entry.sourceTitle} - Score: ${entry.similarity.toFixed(3)}</span>
-              </div>
-              <div class="advice-content">
-                <span class="advice-text">${entry.entry.advice}</span>
-                <span class="advice-context"> - ${entry.entry.adviceContext}</span>
-              </div>
-            </div>
-          `).join('') || '';
-          
-          // Original combined advice display - show all response advice items
-          const selectedAdviceOriginal = responseAdvice.map((entry, index) => `
-            <div class="advice-block">
-              <div>
-                <span class="advice-rank">Rank ${index + 1}</span>
-                <span class="advice-metadata">${entry.entry.category} | ${entry.entry.sourceTitle} - Score: ${entry.similarity.toFixed(3)}</span>
+                <span class="advice-rank">
+                  ${message.metadata?.promptEntries ? `Input ${index + 1}` : `Rank ${index + 1}`} (Score: ${entry.similarity.toFixed(3)})
+                </span>
+                <span class="advice-metadata">${entry.entry.category} | ${entry.entry.sourceTitle}</span>
               </div>
               <div class="advice-content">
                 <span class="advice-text">${entry.entry.advice}</span>
@@ -1023,38 +761,55 @@ export function registerRoutes(app: Express): Server {
 
           const thumbsUp = message.thumbsUp === null ? '-' : (message.thumbsUp ? '👍' : '👎');
           
+          // Extract confidence level for display
+          const confidenceLevel = message.metadata?.confidenceAnalysis?.level || 'unknown';
+          const confidenceText = confidenceLevel.split('_')[0].toUpperCase();
+          const confidenceColorClass = 
+            confidenceLevel === 'high_confidence' ? 'text-green-700' :
+            confidenceLevel === 'medium_confidence' ? 'text-yellow-700' :
+            confidenceLevel === 'low_confidence' ? 'text-red-700' :
+            'text-gray-500';
+          
+          // Construct conditional feedback section HTML
+          let feedbackSectionHtml = '';
+          if (message.thumbsUp !== null || (message.feedback && message.feedback.trim() !== '')) {
+            const feedbackCommentHtml = message.feedback && message.feedback.trim() !== '' 
+              ? `<div><strong>Comment:</strong><div style="white-space: pre-wrap; margin-top: 4px;">${message.feedback}</div></div>` 
+              : '';
+            feedbackSectionHtml = `
+              <div class="feedback-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+                 <h4 style="margin-bottom: 8px; font-weight: bold;">Feedback Provided:</h4>
+                 <div><strong>Rating:</strong> ${thumbsUp}</div>
+                 ${feedbackCommentHtml}
+              </div>
+            `;
+          }
+
           res.write(`
             <tr>
               <td>
                 <div class="query-section">
                   <div class="query-timestamp">${timestamp}</div>
                   <div class="query-text">${message.query}</div>
+                  <div class="query-confidence" style="margin-top: 6px; font-size: 0.9em;">
+                    Confidence: <strong class="${confidenceColorClass}">${confidenceText}</strong>
+                  </div>
                 </div>
                 <div class="advice-section">
-                  <div class="advice-title">Top Advice Items (${responseAdvice.length})</div>
-                  ${selectedAdviceOriginal}
+                  <div class="advice-title">${adviceTitle}</div>
+                  ${adviceHtml} 
                 </div>
-                <div class="selected-advice-section hidden-section">
-                  <div class="advice-title">Top Advice Items (${responseAdvice.length})</div>
-                  ${selectedAdviceHtml}
-                </div>
-                ${otherAdviceHtml ? `
-                <div class="other-advice-section hidden-section">
-                  <div class="advice-title">Additional Advice Items (${otherAdvice.length})</div>
-                  ${otherAdviceHtml}
-                </div>
-                ` : ''}
                 <div class="response-section stage1-response">
-                  <div class="response-title">Stage 1 Response - Curate Narrative</div>
+                  <div class="response-title">Initial Response (Stage 1)</div>
                   <div class="response-content">${(message.stage1Response || '').replace(/[•â€¢]/g, '&#8226;')}</div>
                 </div>
                 <div class="response-section final-response">
-                  <div class="response-title">Stage 2 Response - Style Narrative</div>
+                  <div class="response-title">Final Response (Stage 2)</div>
                   <div class="response-content">${(message.finalResponse || '').replace(/[•â€¢]/g, '&#8226;')}</div>
                 </div>
-                <div class="feedback-indicator">${thumbsUp}</div>
+                
+                ${feedbackSectionHtml}
               </td>
-              ${showFeedback ? `<td>${message.feedback || ''}</td>` : ''}
             </tr>
           `);
         });

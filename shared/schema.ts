@@ -33,6 +33,19 @@ export const messages = pgTable("messages", {
       };
       similarity: number;
     }[];
+    promptEntries?: {
+      entry: {
+        category: string;
+        subCategory: string;
+        advice: string;
+        adviceContext: string;
+        sourceTitle: string;
+        sourceType?: string;
+        sourceLink: string;
+        sourceSummary?: string;
+      };
+      similarity: number;
+    }[];
     confidenceAnalysis?: {
       level: 'high_confidence' | 'medium_confidence' | 'low_confidence';
       weightedScore: number;

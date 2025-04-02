@@ -3,13 +3,25 @@ import Chat from "./chat";
 import Search from "@/components/search/search";
 import { Search as SearchIcon, MessageSquare } from "lucide-react";
 import { useState } from "react";
+import { useLocation } from "wouter";
+import SecondaryNav from '@/components/SecondaryNav/SecondaryNav';
 
 export default function Advice() {
-  const [mode, setMode] = useState<"chat" | "search">("chat");
+  const [location] = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const initialTab = searchParams.get("tab");
+
+  const [mode, setMode] = useState<"chat" | "search">(() => {
+    if (initialTab === "search") {
+      return "search";
+    }
+    return "chat";
+  });
 
   return (
     <div className="min-h-screen bg-white p-4 md:p-8">
       <div className="mx-auto max-w-3xl">
+        <SecondaryNav />
         <h1 
           className="mb-2 text-center text-4xl font-semibold text-threshold-orange" 
           style={{ color: '#F26A36' }}

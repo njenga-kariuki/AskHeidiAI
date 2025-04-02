@@ -1,0 +1,96 @@
+/* client/src/components/SecondaryNav/SecondaryNav.module.css */
+
+/* Secondary Navigation Styles */
+
+.secondaryNav {
+  display: flex;
+  align-items: center;
+  padding: 0px 32px 15px 15px;
+  margin: 0 -32px 30px;
+  font-family: proxima-nova, sans-serif;
+  position: relative;
+  justify-content: flex-start;
+}
+
+.secondaryNav::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: #000000;
+  width: 100%;
+}
+
+.secondaryNavLink {
+  padding: 0px 30px 0px 0px;
+  text-decoration: none;
+  color: #000000;
+  font-size: 18px;
+  font-weight: 500;
+  transition: color 0.2s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  margin: 0px;
+}
+
+.secondaryNavLink:first-child {
+  padding-left: 0;
+}
+
+.secondaryNavLink:hover {
+  color: #F26A36;
+}
+
+.secondaryNavDivider {
+  width: 1px;
+  height: 18px;
+  background-color: #000000;
+  margin: 0px 30px 0px 0px;
+}
+
+.active {
+  color: #F26A36;
+}
+
+.betaSublabel {
+  font-size: 12px;
+  font-weight: 300;
+  color: #555;
+  margin-left: 5px;
+  text-transform: lowercase;
+  vertical-align: super;
+  position: relative;
+  top: -1px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .secondaryNav {
+    display: none; /* Hide on mobile */
+    flex-direction: column;
+    align-items: flex-start;
+    margin: 0 -16px 20px;
+    padding: 0px 16px;
+  }
+
+  .secondaryNavLink {
+    padding: 10px 0;
+    width: 100%;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  .secondaryNavLink:last-child {
+    border-bottom: none;
+  }
+
+  .secondaryNavDivider {
+    display: none;
+  }
+
+  .active {
+    color: #F26A36;
+  }
+} 

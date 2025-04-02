@@ -441,17 +441,44 @@ export async function generateStage1Response(query: string): Promise<string> {
             similarity: r.similarity
           };
         });
+
+        // Map the responseResults (items sent to AI) into the same structure for storage
+        const promptEntries = responseResults.map(r => {
+          const rawData = DataLoader.getInstance().getRawAdviceByProcessed(
+            r.entry.advice,
+            r.entry.adviceContext
+          );
+
+          return {
+            entry: {
+              category: r.entry.category,
+              subCategory: r.entry.subCategory,
+              advice: r.entry.advice,
+              adviceContext: r.entry.adviceContext,
+              sourceTitle: r.entry.sourceTitle,
+              sourceType: r.entry.sourceType,
+              sourceLink: r.entry.sourceLink,
+              sourceSummary: r.entry.sourceSummary,
+              ...(rawData && {
+                rawAdvice: rawData.rawAdvice,
+                rawAdviceContext: rawData.rawAdviceContext
+              })
+            },
+            similarity: r.similarity
+          };
+        });
   
         await storage.updateMessage(messages[0].id, {
           metadata: {
-            displayEntries: mappedEntries,
+            displayEntries: mappedEntries, // Keep original top 10 for potential future use
+            promptEntries: promptEntries, // Add the items actually sent to the AI
             confidenceAnalysis
           }
         });
-        console.log("Successfully stored confidence analysis in message metadata");
+        console.log("Successfully stored confidence analysis and prompt entries in message metadata");
       } catch (storageError) {
         // Log storage errors but don't fail the response generation for them
-        console.error("Error storing confidence metadata:", storageError);
+        console.error("Error storing metadata:", storageError);
       }
     }
 
