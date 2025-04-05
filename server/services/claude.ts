@@ -246,7 +246,7 @@ Response Process:
    - For each source: "• <a href='[sourceLink]'>[Title]</a> ([sourceType])-[sourceSummary]"
    - Include all unique source links from utilized advice points
    - Each source should appear on its own line
-   - Order YouTube sources to the end of the list
+   - ALWAYS Order YouTube sources to the end of the list
    
 
 Important Guidelines:

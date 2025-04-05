@@ -181,15 +181,76 @@ export function registerRoutes(app: Express): Server {
       const showFeedback = req.query.showFeedback === 'true';
       const currentView = (req.query.view as string) || 'detailed'; // Default to detailed view
       
-      // Get messages 
-      const messages = (await storage.getLatestMessages(limit));
-      
-      // Initial filter for completed responses
-      let filteredMessages = messages.filter(msg => 
+      // --- Overview Stats Calculation ---
+      // Fetch ALL completed messages for overview stats
+      const allCompletedMessages = (await storage.getAllMessages()) // Use getAllMessages() instead of getLatestMessages(Infinity)
+        .filter(msg => msg.stage1Response && msg.finalResponse);
+
+      const now = new Date();
+      const intervals = {
+        day: Array(7).fill(0), // Trailing 7 days by day
+        week: 0,              // Trailing week total
+        twoWeeks: 0,          // Trailing 2 week total
+        month: 0,             // Trailing month total
+        threeMonths: 0,       // Trailing 3 month total
+        lifetime: allCompletedMessages.length, // Total lifetime is just the count
+      };
+      const confidenceCounts = {
+        high_confidence: 0,
+        medium_confidence: 0,
+        low_confidence: 0,
+        unknown: 0,
+      };
+
+      const oneDayMs = 24 * 60 * 60 * 1000;
+      const sevenDaysAgo = new Date(now.getTime() - 7 * oneDayMs);
+      const fourteenDaysAgo = new Date(now.getTime() - 14 * oneDayMs);
+      const oneMonthAgo = new Date(now);
+      oneMonthAgo.setMonth(now.getMonth() - 1);
+      const threeMonthsAgo = new Date(now);
+      threeMonthsAgo.setMonth(now.getMonth() - 3);
+
+      allCompletedMessages.forEach(msg => {
+        const createdAt = msg.createdAt ? new Date(msg.createdAt) : null;
+        if (!createdAt) return; // Skip if no creation date
+
+        // Time Interval Calculations
+        const diffDays = Math.floor((now.getTime() - createdAt.getTime()) / oneDayMs);
+        if (diffDays < 7) {
+          intervals.day[6 - diffDays]++; // Index 0 is 6 days ago, index 6 is today
+          intervals.week++;
+        }
+        if (diffDays < 14) {
+          intervals.twoWeeks++;
+        }
+        if (createdAt >= oneMonthAgo) {
+          intervals.month++;
+        }
+        if (createdAt >= threeMonthsAgo) {
+          intervals.threeMonths++;
+        }
+
+        // Confidence Level Calculation
+        const level = msg.metadata?.confidenceAnalysis?.level || 'unknown';
+        if (confidenceCounts.hasOwnProperty(level)) {
+          confidenceCounts[level]++;
+        } else {
+          confidenceCounts.unknown++; // Fallback for unexpected levels
+        }
+      });
+      // --- End Overview Stats Calculation ---
+
+
+      // --- Original Logic for Table View (potentially limited & filtered) ---
+      // Get potentially limited messages for the table/CSV view
+      const messagesForTable = (await storage.getLatestMessages(limit));
+
+      // Initial filter for completed responses for the table view
+      let filteredMessages = messagesForTable.filter(msg =>
         msg.stage1Response && msg.finalResponse
       );
 
-      // Further filter if feedback view is selected
+      // Further filter if feedback view is selected for the table view
       if (currentView === 'feedback') {
         filteredMessages = filteredMessages.filter(msg => 
           // Include if thumbsUp is not null OR feedback text exists
@@ -198,6 +259,33 @@ export function registerRoutes(app: Express): Server {
       }
 
       if (format === 'csv') {
+        // Handle Question Only View for CSV
+        if (currentView === 'question_only') {
+          res.setHeader('Content-Type', 'text/csv');
+          res.setHeader('Content-Disposition', 'attachment; filename=chat-analysis-questions.csv');
+          
+          // CSV header for Question Only view
+          res.write('Timestamp,Query,Confidence_Level\n');
+          
+          filteredMessages.forEach(message => {
+            const timestamp = message.createdAt?.toISOString() || '';
+            const query = message.query.replace(/"/g, '""');
+            const confidenceLevel = message.metadata?.confidenceAnalysis?.level || 'unknown';
+            
+            // Construct and write the CSV row
+            const row = [
+              `"${timestamp}"`,
+              `"${query}"`,
+              `"${confidenceLevel}"`
+            ];
+            res.write(row.join(',') + '\n');
+          });
+          
+          res.end();
+          return; // End response here for question_only CSV
+        } 
+
+        // Existing CSV logic for other views
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename=chat-analysis.csv');
         
@@ -492,6 +580,58 @@ export function registerRoutes(app: Express): Server {
               }
               /* Detailed and Stage views show all by default, JS handles fine-tuning if needed */
 
+              /* CSS for Question Only View */
+              body.view-question_only .advice-section,
+              body.view-question_only .stage1-response, /* Target specific class */
+              body.view-question_only .final-response,  /* Target specific class */
+              body.view-question_only .feedback-section {
+                display: none;
+              }
+              /* Detailed and Stage views show all by default, CSS handles hiding for others */
+
+              /* CSS for Overview View */
+              #overview-section {
+                  padding: 1rem 1.5rem;
+                  border: 1px solid #dee2e6;
+                  border-radius: 8px;
+                  background-color: #ffffff;
+                  margin-bottom: 25px;
+              }
+              #overview-section h2 {
+                margin-top: 0;
+                margin-bottom: 1rem;
+                font-size: 1.4em;
+                border-bottom: 1px solid #dee2e6;
+                padding-bottom: 0.5rem;
+              }
+              #overview-section h3 {
+                 margin-top: 1.5rem;
+                 margin-bottom: 0.5rem;
+                 font-size: 1.1em;
+              }
+              #overview-section ul {
+                 list-style: none;
+                 padding-left: 0;
+              }
+              #overview-section li {
+                 margin-bottom: 0.3rem;
+                 color: #495057; /* Slightly darker gray */
+              }
+               #overview-section li strong {
+                 color: #212529; /* Darker text for numbers */
+                 min-width: 40px; /* Align numbers slightly */
+                 display: inline-block;
+                 text-align: right;
+                 margin-right: 10px;
+               }
+
+              body.view-overview table { /* Hide table in overview */
+                  display: none;
+              }
+              body:not(.view-overview) #overview-section { /* Hide overview section unless view=overview */
+                  display: none;
+              }
+
               @media print {
                 @page {
                   margin: 0.4cm;
@@ -622,14 +762,19 @@ export function registerRoutes(app: Express): Server {
                   text-decoration: underline;
                 }
 
-                /* View-specific styles (Print) */
-                body.view-simplified .advice-section,
-                body.view-simplified .stage1-response {
-                  display: none !important;
+                /* Print CSS for Question Only View */
+                body.view-question_only .advice-section,
+                body.view-question_only .stage1-response,
+                body.view-question_only .final-response,
+                body.view-question_only .feedback-section {
+                   display: none !important;
                 }
-                body.view-feedback .advice-section,
-                body.view-feedback .stage1-response {
-                  display: none !important;
+                /* Ensure necessary sections are displayed for other print views */
+                body.view-simplified .final-response {
+                  display: block !important;
+                }
+                body.view-feedback .final-response {
+                  display: block !important;
                 }
                 body.view-stage .stage1-response,
                 body.view-stage .final-response,
@@ -641,8 +786,7 @@ export function registerRoutes(app: Express): Server {
                 body.view-detailed .advice-section {
                    display: block !important; /* Ensure all needed are visible */
                 }
-              }
-            </style>
+              </style>
           </head>
           <body>
             <h1>Ask Heidi AI Chat Analysis</h1>
@@ -665,6 +809,14 @@ export function registerRoutes(app: Express): Server {
               <label class="view-radio">
                 <input type="radio" name="reportView" value="feedback" onchange="updateQueryParam('view', this.value)" ${currentView === 'feedback' ? 'checked' : ''}>
                 Feedback
+              </label>
+              <label class="view-radio">
+                <input type="radio" name="reportView" value="question_only" onchange="updateQueryParam('view', this.value)" ${currentView === 'question_only' ? 'checked' : ''}>
+                Question Only
+              </label>
+              <label class="view-radio">
+                <input type="radio" name="reportView" value="overview" onchange="updateQueryParam('view', this.value)" ${currentView === 'overview' ? 'checked' : ''}>
+                Overview
               </label>
             </div>
             <div id="viewIndicator" class="view-indicator"></div>
@@ -689,25 +841,14 @@ export function registerRoutes(app: Express): Server {
                 const viewIndicator = document.getElementById('viewIndicator');
                 let indicatorText = '';
 
-                // Define visibility for each section based on view
-                const showAdvice = (view === 'detailed' || view === 'stage');
-                const showStage1 = (view === 'detailed' || view === 'stage');
-                const showFinalResponse = (view === 'simplified' || view === 'detailed' || view === 'stage' || view === 'feedback');
-
-                document.querySelectorAll('.report-entry').forEach(row => {
-                  const adviceSection = row.querySelector('.advice-section');
-                  const stage1Section = row.querySelector('.stage1-response');
-                  const finalSection = row.querySelector('.final-response');
-                  
-                  if (adviceSection) adviceSection.style.display = showAdvice ? 'block' : 'none';
-                  if (stage1Section) stage1Section.style.display = showStage1 ? 'block' : 'none';
-                  if (finalSection) finalSection.style.display = showFinalResponse ? 'block' : 'none';
-                });
+                // Rely purely on CSS classes added to body tag for hiding/showing sections
 
                 // Set indicator text
                 if (view === 'simplified') indicatorText = 'Simplified View: Query & Final Response';
                 else if (view === 'detailed') indicatorText = 'Detailed View: Query, Advice, Stage 1, Final Response';
                 else if (view === 'feedback') indicatorText = 'Feedback View: Showing only entries with feedback text';
+                else if (view === 'question_only') indicatorText = 'Question Only View: Query, Timestamp & Confidence';
+                else if (view === 'overview') indicatorText = 'Overview: High-level Statistics';
 
                 if (view !== 'detailed') { // Show indicator for non-default views
                   viewIndicator.textContent = indicatorText;
@@ -722,6 +863,41 @@ export function registerRoutes(app: Express): Server {
                 applyViewStyles(currentView);
               });
             </script>
+            <!-- Overview Section -->
+            <div id="overview-section">
+              <h2>Chat Analysis Overview</h2>
+
+              <h3>Question Quantity</h3>
+              
+              <h4>Daily Breakdown (Past 7 Days)</h4>
+              <ul>
+                ${intervals.day.slice().reverse().map((count, i) => {
+                  const date = new Date(now.getTime() - i * oneDayMs);
+                  const dateString = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Los_Angeles' });
+                  const dayName = date.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Los_Angeles' });
+                  return `<li>${dateString} (${dayName}): <strong>${count}</strong></li>`;
+                }).join('')}
+              </ul>
+
+              <h4>Summary Totals</h4>
+              <ul>
+                <li>Past 7 Days Total: <strong>${intervals.week}</strong></li>
+                <li>Past 14 Days Total: <strong>${intervals.twoWeeks}</strong></li>
+                <li>Past Month Total: <strong>${intervals.month}</strong></li>
+                <li>Past 3 Months Total: <strong>${intervals.threeMonths}</strong></li>
+                <li>Total Lifetime: <strong>${intervals.lifetime}</strong></li>
+              </ul>
+
+              <h3>Questions by Confidence Level</h3>
+               <ul>
+                <li>High Confidence: <strong>${confidenceCounts.high_confidence}</strong></li>
+                <li>Medium Confidence: <strong>${confidenceCounts.medium_confidence}</strong></li>
+                <li>Low Confidence: <strong>${confidenceCounts.low_confidence}</strong></li>
+                <li>Unknown: <strong>${confidenceCounts.unknown}</strong></li>
+              </ul>
+            </div>
+            <!-- End Overview Section -->
+
             <table>
               <thead class="print-once">
                 <tr>
@@ -732,7 +908,13 @@ export function registerRoutes(app: Express): Server {
         `);
 
         filteredMessages.forEach(message => {
-          const timestamp = message.createdAt ? new Date(message.createdAt).toLocaleString() : '';
+          const timestamp = message.createdAt 
+            ? new Date(message.createdAt).toLocaleDateString('en-US', { 
+                year: 'numeric', month: 'short', day: 'numeric', 
+                hour: 'numeric', minute: '2-digit', /* second: '2-digit', */
+                timeZoneName: 'short', timeZone: 'America/Los_Angeles' 
+              })
+            : '';
           
           // Use promptEntries if available, otherwise use displayEntries for older messages
           const adviceEntries = message.metadata?.promptEntries || message.metadata?.displayEntries || [];
@@ -785,33 +967,49 @@ export function registerRoutes(app: Express): Server {
             `;
           }
 
-          res.write(`
-            <tr>
-              <td>
-                <div class="query-section">
-                  <div class="query-timestamp">${timestamp}</div>
-                  <div class="query-text">${message.query}</div>
-                  <div class="query-confidence" style="margin-top: 6px; font-size: 0.9em;">
-                    Confidence: <strong class="${confidenceColorClass}">${confidenceText}</strong>
+          // ---> MODIFICATION: Conditionally generate row HTML based on view
+          if (currentView === 'question_only') {
+            // Simplified row structure for Question Only view
+            res.write(`
+              <tr>
+                <td style="padding: 10px 16px; line-height: 1.4;"> 
+                  <span style="font-size: 0.85em; color: #6c757d; margin-right: 15px; white-space: nowrap;">${timestamp}</span>
+                  <span style="font-size: 0.9em; margin-right: 15px; white-space: nowrap;">Confidence: <strong class="${confidenceColorClass}">${confidenceText}</strong></span>
+                  <span style="font-weight: 500;">${message.query}</span> 
+                </td>
+              </tr>
+            `);
+          } else {
+            // Existing detailed row structure for other views
+            res.write(`
+              <tr>
+                <td>
+                  <div class="query-section">
+                    <div class="query-timestamp">${timestamp}</div>
+                    <div class="query-text">${message.query}</div>
+                    <div class="query-confidence" style="margin-top: 6px; font-size: 0.9em;">
+                      Confidence: <strong class="${confidenceColorClass}">${confidenceText}</strong>
+                    </div>
                   </div>
-                </div>
-                <div class="advice-section">
-                  <div class="advice-title">${adviceTitle}</div>
-                  ${adviceHtml} 
-                </div>
-                <div class="response-section stage1-response">
-                  <div class="response-title">Initial Response (Stage 1)</div>
-                  <div class="response-content">${(message.stage1Response || '').replace(/[•â€¢]/g, '&#8226;')}</div>
-                </div>
-                <div class="response-section final-response">
-                  <div class="response-title">Final Response (Stage 2)</div>
-                  <div class="response-content">${(message.finalResponse || '').replace(/[•â€¢]/g, '&#8226;')}</div>
-                </div>
-                
-                ${feedbackSectionHtml}
-              </td>
-            </tr>
-          `);
+                  <div class="advice-section">
+                    <div class="advice-title">${adviceTitle}</div>
+                    ${adviceHtml}
+                  </div>
+                  <div class="response-section stage1-response">
+                    <div class="response-title">Initial Response (Stage 1)</div>
+                    <div class="response-content">${(message.stage1Response || '').replace(/[•â€¢]/g, '&#8226;')}</div>
+                  </div>
+                  <div class="response-section final-response">
+                    <div class="response-title">Final Response (Stage 2)</div>
+                    <div class="response-content">${(message.finalResponse || '').replace(/[•â€¢]/g, '&#8226;')}</div>
+                  </div>
+                  
+                  ${feedbackSectionHtml}
+                </td>
+              </tr>
+            `);
+          }
+          // ---> END MODIFICATION
         });
 
         res.write(`

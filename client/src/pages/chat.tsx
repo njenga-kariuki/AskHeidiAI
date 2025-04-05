@@ -43,7 +43,7 @@ const formatResponse = (text: string): string => {
           containsLineBreaks: group1.includes('<br />'),
           containsNewlines: group1.includes('\n'),
           // Log the HTML structure more clearly
-          htmlStructure: group1.split(/(<[^>]+>)/).filter(Boolean).map(part => ({
+          htmlStructure: group1.split(/(<[^>]+>)/).filter(Boolean).map((part: string) => ({
             type: part.startsWith('<') ? 'tag' : 'content',
             value: part
           }))
@@ -63,7 +63,18 @@ const formatResponse = (text: string): string => {
       }
     )
     // Clean up any line breaks between bullet points and ensure consistent spacing
-    .replace(/(<\/li>)\s*<br \/>\s*(•|<li>)/g, '$1$2');
+    .replace(/(<\/li>)\s*<br \/>\s*(•|<li>)/g, '$1$2')
+    // Catch any unconverted bullet points right before the closing </ul>
+    .replace(
+      /•\s*(<a.*?<\/a>)(\s*\([^)]*\))?(?:-\s*([^<]*))?(\s*<\/ul>)/g,
+      function(cleanupMatch, link, sourceType, summary, closingUlTag) {
+        console.log("Applying cleanup regex for potential last bullet in chat:", { link, sourceType, summary });
+        // Format the missed bullet point correctly
+        return '<li>' + link + (sourceType || '') +
+               (summary ? ' - <span class="text-sm text-gray-500">' + summary.trim() + '</span>' : '') +
+               '</li>' + closingUlTag; // Append the closing </ul> tag back
+      }
+    );
 
   return formatted;
 };
