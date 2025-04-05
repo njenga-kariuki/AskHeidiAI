@@ -41,7 +41,7 @@ const SecondaryNav = () => {
         Season 4
       </a>
       <a 
-        href="/advice" 
+        href="https://heidi-ai.replit.app/" 
         className={`${styles.secondaryNavLink} ${styles.active}`} 
         aria-current="page"
       >
