@@ -2,21 +2,27 @@ import { Card } from "@/components/ui/card";
 import Chat from "./chat";
 import Search from "@/components/search/search";
 import { Search as SearchIcon, MessageSquare } from "lucide-react";
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useState, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import SecondaryNav from '@/components/SecondaryNav/SecondaryNav';
 
 export default function Advice() {
-  const [location] = useLocation();
-  const searchParams = new URLSearchParams(location.search);
+  const search = useSearch();
+  const searchParams = new URLSearchParams(search);
   const initialTab = searchParams.get("tab");
 
+  console.log("Initial search string:", search);
+  console.log("Initial initialTab:", initialTab);
+
   const [mode, setMode] = useState<"chat" | "search">(() => {
-    if (initialTab === "search") {
-      return "search";
-    }
-    return "chat";
+    const calculatedMode = initialTab === "search" ? "search" : "chat";
+    console.log("Initial mode set to:", calculatedMode);
+    return calculatedMode;
   });
+
+  useEffect(() => {
+    console.log("Mode state updated to:", mode);
+  }, [mode]);
 
   return (
     <div className="min-h-screen bg-white p-4 md:p-8">
