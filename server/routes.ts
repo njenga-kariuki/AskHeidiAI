@@ -176,7 +176,7 @@ export function registerRoutes(app: Express): Server {
 
   app.get("/api/reports/chat-analysis", async (req, res) => {
     try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 25, 100);
+      const limit = Math.min(parseInt(req.query.limit as string) || 25, 150);
       const format = (req.query.format as string)?.toLowerCase() || 'html';
       const showFeedback = req.query.showFeedback === 'true';
       const currentView = (req.query.view as string) || 'detailed'; // Default to detailed view
@@ -769,22 +769,15 @@ export function registerRoutes(app: Express): Server {
                 body.view-question_only .feedback-section {
                    display: none !important;
                 }
+                /* Print CSS for Simplified View */
+                body.view-simplified .advice-section,
+                body.view-simplified .stage1-response,
+                body.view-simplified .feedback-section {
+                   display: none !important;
+                }
                 /* Ensure necessary sections are displayed for other print views */
                 body.view-simplified .final-response {
                   display: block !important;
-                }
-                body.view-feedback .final-response {
-                  display: block !important;
-                }
-                body.view-stage .stage1-response,
-                body.view-stage .final-response,
-                body.view-stage .advice-section {
-                   display: block !important; /* Ensure all needed are visible */
-                }
-                 body.view-detailed .stage1-response,
-                body.view-detailed .final-response,
-                body.view-detailed .advice-section {
-                   display: block !important; /* Ensure all needed are visible */
                 }
               </style>
           </head>
@@ -796,6 +789,7 @@ export function registerRoutes(app: Express): Server {
                 <option value="25" ${limit === 25 ? 'selected' : ''}>Last 25</option>
                 <option value="50" ${limit === 50 ? 'selected' : ''}>Last 50</option>
                 <option value="100" ${limit === 100 ? 'selected' : ''}>Last 100</option>
+                <option value="150" ${limit === 150 ? 'selected' : ''}>Last 150</option>
               </select>
               <span style="margin-left: 20px; font-weight: bold;">View:</span>
               <label class="view-radio">
