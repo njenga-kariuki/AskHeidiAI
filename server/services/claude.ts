@@ -42,29 +42,49 @@ function calculateConfidence(results: VectorSearchResult[]): {
     throw new Error("Cannot calculate confidence with empty results");
   }
   
-  // 1. Calculate weighted score from top 3 results
+  // Optimized single-pass calculation
   const WEIGHTS = [0.6, 0.3, 0.1]; // Prioritize top result
-  let weightedScore = 0;
-  let weightsUsed = 0;
-  
-  for (let i = 0; i < Math.min(results.length, WEIGHTS.length); i++) {
-    weightedScore += results[i].similarity * WEIGHTS[i];
-    weightsUsed += WEIGHTS[i];
-  }
-  
-  weightedScore = weightedScore / weightsUsed;
-  
-  // 2. Count number of results above confidence thresholds
   const MINIMUM_HIGH_THRESHOLD = 0.52;
   const MINIMUM_MEDIUM_THRESHOLD = 0.46;
-  const countAboveHighThreshold = results.filter(r => r.similarity >= MINIMUM_HIGH_THRESHOLD).length;
-  const countAboveMediumThreshold = results.filter(r => r.similarity >= MINIMUM_MEDIUM_THRESHOLD).length;
   
-  // 3. Check for category consistency (in top 3 results)
-  const topCategories = results.slice(0, Math.min(3, results.length)).map(r => r.entry.category);
-  const categoryConsistency = topCategories.every(c => c === topCategories[0]);
+  let weightedScore = 0;
+  let weightsUsed = 0;
+  let countAboveHighThreshold = 0;
+  let countAboveMediumThreshold = 0;
+  const topCategories: string[] = [];
   
-  // 4. Get the top score
+  // Single pass through results for all calculations
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    const similarity = result.similarity;
+    
+    // Calculate weighted score for top 3 results
+    if (i < WEIGHTS.length) {
+      weightedScore += similarity * WEIGHTS[i];
+      weightsUsed += WEIGHTS[i];
+    }
+    
+    // Count thresholds
+    if (similarity >= MINIMUM_HIGH_THRESHOLD) {
+      countAboveHighThreshold++;
+    }
+    if (similarity >= MINIMUM_MEDIUM_THRESHOLD) {
+      countAboveMediumThreshold++;
+    }
+    
+    // Collect top 3 categories for consistency check
+    if (i < 3) {
+      topCategories.push(result.entry.category);
+    }
+  }
+  
+  // Finalize weighted score
+  weightedScore = weightedScore / weightsUsed;
+  
+  // Check category consistency (single operation)
+  const categoryConsistency = topCategories.length > 0 && topCategories.every(c => c === topCategories[0]);
+  
+  // Get the top score
   const topScore = results[0].similarity;
   
   // Log detailed metrics for tuning and debugging
@@ -78,7 +98,7 @@ function calculateConfidence(results: VectorSearchResult[]): {
     totalResults: results.length
   });
   
-  // 5. Determine confidence level using multiple factors
+  // Determine confidence level using multiple factors
   let level: 'high_confidence' | 'medium_confidence' | 'low_confidence';
   let explanation: string;
   
@@ -385,22 +405,31 @@ export async function generateStage1Response(query: string): Promise<string> {
       // Using constants that can be adjusted based on performance
       const HIGH_QUALITY_FLOOR = 0.49;  // Minimum high-quality threshold
       const TOP_SCORE_GAP = 0.08;       // Maximum allowed gap from top score
+      const MAX_ENTRIES = 8;  // Maximum number of entries to include
       
       const highQualityThreshold = Math.max(HIGH_QUALITY_FLOOR, topSimilarity - TOP_SCORE_GAP);
       
-      // Get items above high quality threshold
-      const highQualityItems = searchResults.filter(
-        result => result.similarity >= highQualityThreshold
-      );
+      // Optimized single-pass selection with early termination
+      const selectedResults: VectorSearchResult[] = [];
       
-      // If we have more than 5 high quality items, take up to 8
-      if (highQualityItems.length > 5) {
-        const MAX_ENTRIES = 8;  // Maximum number of entries to include
-        return highQualityItems.slice(0, MAX_ENTRIES);
+      for (let i = 0; i < searchResults.length && selectedResults.length < MAX_ENTRIES; i++) {
+        const result = searchResults[i];
+        
+        // Always include top 5 results
+        if (i < 5) {
+          selectedResults.push(result);
+        } 
+        // For positions 6-8, only include if above high quality threshold
+        else if (result.similarity >= highQualityThreshold) {
+          selectedResults.push(result);
+        }
+        // Early termination: if we're past position 5 and below threshold, stop
+        else {
+          break;
+        }
       }
       
-      // Otherwise, return top 5 (standard behavior)
-      return searchResults.slice(0, 5);
+      return selectedResults;
     }
 
     // Calculate confidence - let any errors bubble up and fail the whole response generation

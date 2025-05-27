@@ -9,9 +9,10 @@ const __dirname = path.dirname(__filename);
 
 export class VectorSearch {
   private openai: OpenAI;
-  private embeddings: { entry: AdviceEntry; vector: number[] }[] = [];
-  private categoryEmbeddings: Map<string, number[]> = new Map();
+  private embeddings: { entry: AdviceEntry; vector: Float32Array }[] = [];
+  private categoryEmbeddings: Map<string, Float32Array> = new Map();
   private cacheFilePath: string;
+  private vectorDimension: number = 3072; // text-embedding-3-large dimension
 
   constructor(apiKey: string) {
     this.openai = new OpenAI({ apiKey });
@@ -58,8 +59,15 @@ export class VectorSearch {
       if (fs.existsSync(this.cacheFilePath)) {
         const rawData = fs.readFileSync(this.cacheFilePath, 'utf8');
         const cache = JSON.parse(rawData);
-        this.categoryEmbeddings = new Map(cache.categoryEmbeddings);
-        this.embeddings = cache.embeddings;
+        
+        // Convert stored arrays back to Float32Array
+        this.categoryEmbeddings = new Map(cache.categoryEmbeddings.map(([key, value]: [string, number[]]) => 
+          [key, new Float32Array(value)]
+        ));
+        this.embeddings = cache.embeddings.map((item: any) => ({
+          entry: item.entry,
+          vector: new Float32Array(item.vector)
+        }));
         
         // Create backup of valid cache
         fs.writeFileSync(backupPath, rawData);
@@ -71,8 +79,15 @@ export class VectorSearch {
       if (fs.existsSync(backupPath)) {
         const backupData = fs.readFileSync(backupPath, 'utf8');
         const cache = JSON.parse(backupData);
-        this.categoryEmbeddings = new Map(cache.categoryEmbeddings);
-        this.embeddings = cache.embeddings;
+        
+        // Convert stored arrays back to Float32Array
+        this.categoryEmbeddings = new Map(cache.categoryEmbeddings.map(([key, value]: [string, number[]]) => 
+          [key, new Float32Array(value)]
+        ));
+        this.embeddings = cache.embeddings.map((item: any) => ({
+          entry: item.entry,
+          vector: new Float32Array(item.vector)
+        }));
         console.log('Loaded embeddings from backup cache');
         return true;
       }
@@ -108,8 +123,14 @@ export class VectorSearch {
     const cache = {
       version: '1.0',
       model: "text-embedding-3-large",
-      categoryEmbeddings: Array.from(this.categoryEmbeddings.entries()),
-      embeddings: this.embeddings,
+      // Convert Float32Array back to regular arrays for JSON serialization
+      categoryEmbeddings: Array.from(this.categoryEmbeddings.entries()).map(([key, value]) => 
+        [key, Array.from(value)]
+      ),
+      embeddings: this.embeddings.map(item => ({
+        entry: item.entry,
+        vector: Array.from(item.vector)
+      })),
     };
     try {
       fs.writeFileSync(this.cacheFilePath, JSON.stringify(cache), 'utf8');
@@ -208,24 +229,40 @@ export class VectorSearch {
     }
   }
 
-  private async getEmbedding(text: string): Promise<number[]> {
+  private async getEmbedding(text: string): Promise<Float32Array> {
     try {
       const response = await this.openai.embeddings.create({
         model: "text-embedding-3-large",
         input: text
       });
-      return response.data[0].embedding;
+      // Convert to Float32Array for better performance
+      return new Float32Array(response.data[0].embedding);
     } catch (error) {
       console.error('Error getting embedding:', error);
       throw error;
     }
   }
 
-  private cosineSimilarity(a: number[], b: number[]): number {
-    const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
-    const magnitudeA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
-    const magnitudeB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
-    return dotProduct / (magnitudeA * magnitudeB);
+  private cosineSimilarity(a: Float32Array, b: Float32Array): number {
+    // Optimized cosine similarity calculation
+    // Same mathematical result, but more efficient computation
+    let dotProduct = 0;
+    let magnitudeA = 0;
+    let magnitudeB = 0;
+    
+    // Single loop for all calculations - more cache-friendly
+    const length = a.length;
+    for (let i = 0; i < length; i++) {
+      const aVal = a[i];
+      const bVal = b[i];
+      dotProduct += aVal * bVal;
+      magnitudeA += aVal * aVal;
+      magnitudeB += bVal * bVal;
+    }
+    
+    // Avoid redundant sqrt calls by combining them
+    const magnitude = Math.sqrt(magnitudeA * magnitudeB);
+    return magnitude > 0 ? dotProduct / magnitude : 0;
   }
 
   public async search(query: string, threshold: number = 0.5): Promise<VectorSearchResult[]> {
@@ -236,7 +273,7 @@ export class VectorSearch {
       // Get the main query vector
       const mainQueryVector = await this.getEmbedding(query);
 
-      // Get category similarities and log each
+      // Get category similarities - pre-allocate map for efficiency
       const categorySimilarities = new Map<string, number>();
       for (const [category, vector] of this.categoryEmbeddings.entries()) {
         const sim = this.cosineSimilarity(mainQueryVector, vector);
@@ -244,8 +281,12 @@ export class VectorSearch {
         console.log(`Category: ${category}, Similarity: ${sim}`);
       }
 
+      // Pre-allocate results array for better memory efficiency
+      const allResults: VectorSearchResult[] = new Array(this.embeddings.length);
+      
       // Calculate similarities for all entries
-      const allResults = this.embeddings.map(({ entry, vector }, index) => {
+      for (let index = 0; index < this.embeddings.length; index++) {
+        const { entry, vector } = this.embeddings[index];
         const directSimilarity = this.cosineSimilarity(mainQueryVector, vector);
         const categorySimilarity = categorySimilarities.get(entry.category) || 0;
 
@@ -260,18 +301,18 @@ export class VectorSearch {
           console.log(`   Combined Similarity: ${combinedSimilarity}`);
         }
 
-        return {
+        allResults[index] = {
           entry,
           similarity: combinedSimilarity
         };
-      });
+      }
 
-      // Sort by similarity
-      const sortedResults = allResults.sort((a, b) => b.similarity - a.similarity);
+      // Use more efficient sorting - sort in place
+      allResults.sort((a, b) => b.similarity - a.similarity);
 
       // Log top 3 similarities before filtering
       console.log('Top 3 similarities:', 
-        sortedResults.slice(0, 3).map(r => ({
+        allResults.slice(0, 3).map(r => ({
           similarity: r.similarity,
           category: r.entry.category,
           subCategory: r.entry.subCategory,
@@ -279,10 +320,13 @@ export class VectorSearch {
         }))
       );
 
-      // Apply threshold and get top results
-      const results = sortedResults
-        .filter(result => result.similarity >= threshold)
-        .slice(0, 10);  // Get top 10 results
+      // Apply threshold and get top results - use a single pass
+      const results: VectorSearchResult[] = [];
+      for (let i = 0; i < allResults.length && results.length < 10; i++) {
+        if (allResults[i].similarity >= threshold) {
+          results.push(allResults[i]);
+        }
+      }
 
       console.log(`Found ${results.length} results above threshold ${threshold}`);
 

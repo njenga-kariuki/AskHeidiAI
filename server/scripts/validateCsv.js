@@ -5,7 +5,7 @@ const { parse } = require('papaparse');
 // Safe CSV validation - only checks structure without affecting system
 (async () => {
   try {
-    const csvPath = process.argv[2] || path.join(process.cwd(), 'server/data/new_advice_3.11.csv');
+    const csvPath = process.argv[2] || path.join(process.cwd(), 'server/data/advice.csv');
     console.log(`Validating CSV file: ${csvPath}`);
     
     if (!fs.existsSync(csvPath)) {
