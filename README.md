@@ -2,13 +2,21 @@
 
 A purpose-built platform that scales access to Heidi Roizen's entrepreneurial wisdom through a custom-curated chatbot, search, and browse experience.
 
-## Try It Out
+<div>
+    <a href="https://www.loom.com/share/24b23383e9f34d6ab663bd1a069a6fd0">
+      <p>Demo Video</p>
+    </a>
+    <a href="https://www.loom.com/share/24b23383e9f34d6ab663bd1a069a6fd0">
+      <img style="max-width:300px;" src="https://cdn.loom.com/sessions/thumbnails/24b23383e9f34d6ab663bd1a069a6fd0-9a2e855065e9e0bf-full-play.gif">
+    </a>
+  </div>
 
-**[Ask Heidi](https://heidi-ai.replit.app/)** 
+
+<a href="https://heidi-ai.replit.app/">Try It</a>
 
 ## About Heidi Roizen
 
-Heidi Roizen is a prominent venture capitalist with 40+ years of experience as both founder and investor. Having served on more than 40 corporate boards throughout her career, she's one of Silicon Valley's most respected voices in entrepreneurship. Her insights are in high demand from founders seeking guidance on their startup journeys.
+Heidi Roizen is a prominent venture capitalist (and my mentor!) with 40+ years of experience as both founder and investor. Having served on more than 40 corporate boards throughout her career, she's one of Silicon Valley's most respected voices in entrepreneurship. Her insights are in high demand from founders seeking guidance on their startup journeys.
 
 ## Project Purpose
 
