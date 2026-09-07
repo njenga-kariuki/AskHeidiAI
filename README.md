@@ -11,9 +11,6 @@ A purpose-built platform that scales access to Heidi Roizen's entrepreneurial wi
     </a>
   </div>
 
-
-<a href="https://heidi-ai.replit.app/">Try It</a>
-
 ## About Heidi Roizen
 
 Heidi Roizen is a prominent venture capitalist (and my mentor!) with 40+ years of experience as both founder and investor. Having served on more than 40 corporate boards throughout her career, she's one of Silicon Valley's most respected voices in entrepreneurship. Her insights are in high demand from founders seeking guidance on their startup journeys.
@@ -29,7 +26,7 @@ The platform provides three ways to access Heidi's entrepreneurial wisdom:
 2. **Semantic Search**: Finds specific insights across her collected wisdom
 3. **Browse Experience**: Explore categorized startup advice by topic
 
-Unlike previous attempts by others to create a Heidi chatbot (which failed to meet her quality standards by not exclusively using her content and voice), this implementation maintains complete fidelity to Heidi's actual advice and communication style.
+The design centers on retrieving Heidi's own published advice and linking responses back to the original sources. Source selection, attribution and response style are explicit parts of the implementation.
 
 ## Development Approach
 
@@ -43,7 +40,7 @@ Rather than using one-click solutions or high-level frameworks like LangChain, I
    - Response generation that authentically preserves Heidi's voice
    - Attribution that links advice to original sources
 
-3. **Implemented Specialized Prompting**: Created custom two-stage prompting that ensures responses are both relevant to user queries and faithful to Heidi's communication style.
+3. **Implemented Specialized Prompting**: Created custom two-stage prompting to select relevant advice and guide responses toward Heidi's communication style.
 
 ## Key Technical Features
 
@@ -63,7 +60,7 @@ Rather than using one-click solutions or high-level frameworks like LangChain, I
 - **AI Services**: 
   - Anthropic Claude for response generation
   - OpenAI for embedding generation
-- **Deployment**: PM2 process manager for production reliability
+- **Deployment**: PM2 process manager
 
 ## Implementation Details
 
@@ -71,7 +68,7 @@ Rather than using one-click solutions or high-level frameworks like LangChain, I
 - Two-phase prompt engineering with specialized system prompts
 - Robust embedding caching system with backup mechanisms
 - Streaming response generation
-- Comprehensive error handling and rate limiting
+- Error handling and rate-limit handling for AI service calls
 
 # Project Structure
 
@@ -90,3 +87,10 @@ Rather than using one-click solutions or high-level frameworks like LangChain, I
 
 Special thanks to Heidi Roizen for her entrepreneurial wisdom that forms the foundation of this advisory system.
 
+## Project status and local setup
+
+Built in February–May 2025. The recorded demo captures the implemented experience: chat, semantic search, source attribution and topic browsing. The curated corpus contains more than 650 advice entries from over 70 public sources; the source CSVs, prompts and embedding-cache implementation are included.
+
+For local exploration, install the dependencies with `npm ci`, configure the environment variables in [.env.example](.env.example), and provision a PostgreSQL database using the schema in `shared/schema.ts`. `npm run dev` starts the application and `npm run regenerate-embeddings` rebuilds the search cache. The application reads configuration from the process environment.
+
+Review model IDs, dependencies and database configuration before connecting current services. The original implementation uses shared conversation state and reporting routes that need user isolation and access controls before a shared deployment. The published source has not been revalidated end to end against today's APIs.
